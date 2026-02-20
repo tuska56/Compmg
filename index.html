@@ -2,116 +2,158 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>NUNCIO MG-COMP FULL EDITOR</title>
+    <title>NUNCIO MG-COMP DEBUGGER</title>
     <style>
-        body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
-        .box { border: 1px solid #0f0; padding: 20px; margin-bottom: 20px; }
-        #fileInput { background: #0f0; color: #000; padding: 10px; cursor: pointer; width: 100%; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #333; padding: 5px; text-align: right; font-size: 12px; }
-        th { background: #111; color: #0f0; }
-        input { background: #000; color: #fff; border: 1px solid #0f0; width: 70px; }
-        .btn-save { position: fixed; top: 20px; right: 20px; padding: 15px; background: #0f0; color: #000; font-weight: bold; cursor: pointer; border: none; }
-        .source-title { color: #fff; background: #222; padding: 5px; margin-top: 20px; }
+        body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #00ff00; padding: 20px; }
+        .panel { border: 2px solid #00ff00; padding: 20px; background: #000; margin-bottom: 20px; }
+        #log { font-size: 14px; color: #aaa; margin-bottom: 10px; border-left: 3px solid #444; padding-left: 10px; }
+        .axis-box { border: 1px solid #333; margin-top: 15px; background: #222; }
+        .axis-title { background: #00ff00; color: #000; padding: 5px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; background: #000; }
+        th, td { border: 1px solid #333; padding: 4px; font-size: 11px; color: #fff; }
+        input { background: #000; color: #00ff00; border: 1px solid #444; width: 80px; font-size: 11px; }
+        .btn-save { position: fixed; top: 20px; right: 20px; padding: 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; display: none; }
+        .error { color: #ff0000; font-weight: bold; padding: 10px; border: 1px solid #ff0000; }
     </style>
 </head>
 <body>
 
-    <h1>NUNCIO_CORE_READER_v3</h1>
-    
-    <div class="box">
-        <h3>1. SELECCIONA EL ARCHIVO .MgComp</h3>
-        <input type="file" id="fileInput">
+    <div class="panel">
+        <h2>SISTEMA DE EDICIÓN MG-COMP</h2>
+        <input type="file" id="fileInput" accept=".MgComp">
+        <div id="log">Estado: Esperando archivo...</div>
     </div>
 
-    <button class="btn-save" onclick="save()">DESCARGAR EDITADO</button>
+    <button id="saveBtn" class="btn-save" onclick="save()">GENERAR NUEVO .MgComp</button>
 
-    <div id="output"></div>
+    <div id="editor"></div>
 
 <script>
-    let rawBuffer = null;
-    let dataView = null;
+    const fileInput = document.getElementById('fileInput');
+    const logDiv = document.getElementById('log');
+    const editor = document.getElementById('editor');
+    const saveBtn = document.getElementById('saveBtn');
 
-    // EL DISPARADOR: Este evento NO falla
-    document.getElementById('fileInput').onchange = function(e) {
+    let mainBuffer = null;
+    let mainView = null;
+
+    function log(msg, isError = false) {
+        const time = new Date().toLocaleTimeString();
+        logDiv.innerHTML = `<span style="color:${isError ? 'red' : '#0f0'}">[${time}] ${msg}</span>`;
+        console.log(msg);
+    }
+
+    fileInput.onchange = function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
+        log(`Leyendo archivo: ${file.name} (${(file.size / 1024).toFixed(2)} KB)...`);
+        editor.innerHTML = ""; // Limpiar previo
+
         const reader = new FileReader();
+        
+        reader.onerror = () => log("Error al leer el archivo físico", true);
+        
         reader.onload = function(event) {
-            rawBuffer = new Uint8Array(event.target.result);
-            dataView = new DataView(rawBuffer.buffer);
-            renderFull();
+            try {
+                const arrayBuffer = event.target.result;
+                mainBuffer = new Uint8Array(arrayBuffer);
+                mainView = new DataView(arrayBuffer);
+                
+                log("Archivo en memoria. Buscando estructura de datos...");
+                renderContent();
+            } catch (err) {
+                log("FALLO CRÍTICO: " + err.message, true);
+            }
         };
         reader.readAsArrayBuffer(file);
     };
 
-    function renderFull() {
-        const out = document.getElementById('output');
-        out.innerHTML = "Generando tablas...";
-        let html = "";
-
+    function renderContent() {
         const decoder = new TextDecoder();
-        const text = decoder.decode(rawBuffer);
+        // Leemos solo lo necesario para encontrar las etiquetas para evitar cuelgues
+        const textContent = decoder.decode(mainBuffer);
         
-        // Buscamos todos los bloques 
-        const regex = /\/g;
-        let matches = [];
-        let m;
-        while ((m = regex.exec(text)) !== null) {
-            matches.push({ id: m[1], start: m.index, dataStart: m.index + m[0].length + 2 });
+        const sourceRegex = /\/g;
+        let blocks = [];
+        let match;
+
+        while ((match = sourceRegex.exec(textContent)) !== null) {
+            blocks.push({
+                id: match[1],
+                start: match.index,
+                dataStart: match.index + match[0].length + 2
+            });
         }
 
-        matches.forEach((block, i) => {
-            let end = (matches[i+1]) ? matches[i+1].start : rawBuffer.length;
-            let size = end - block.dataStart;
-            let points = (block.id < 13) ? Math.floor(size / 48) : 0;
+        if (blocks.length === 0) {
+            log("No se encontraron etiquetas ''. ¿Es el archivo correcto?", true);
+            return;
+        }
 
-            html += `<div class="source-title">BLOQUE ${block.id} (${points} Puntos)</div>`;
-            html += `<table><tr><th>ID</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>`;
-            
-            if (points > 0) {
-                // Solo mostramos los puntos de los ejes
-                for (let p = 0; p < points; p++) {
-                    let off = block.dataStart + (p * 48);
-                    html += `<tr><td>${p}</td>`;
+        log(`Detectados ${blocks.length} bloques. Renderizando tablas...`);
+        let finalHtml = "";
+
+        blocks.forEach((block, i) => {
+            let nextStart = (blocks[i+1]) ? blocks[i+1].start : mainBuffer.length;
+            let byteSize = nextStart - block.dataStart;
+            let numPoints = (block.id < 13) ? Math.floor(byteSize / 48) : 0;
+
+            finalHtml += `<div class="axis-box">
+                <div class="axis-title">BLOQUE ${block.id} | Puntos: ${numPoints}</div>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead><tr><th>PTO</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr></thead>
+                        <tbody>`;
+
+            if (numPoints > 0) {
+                // Limitar a los primeros 500 puntos por bloque para no colapsar el navegador si es gigante
+                let limit = Math.min(numPoints, 1000); 
+                for (let p = 0; p < limit; p++) {
+                    let offset = block.dataStart + (p * 48);
+                    finalHtml += `<tr><td>${p}</td>`;
                     for (let c = 0; c < 6; c++) {
-                        let val = dataView.getFloat64(off + (c * 8), true);
-                        html += `<td><input type="number" step="any" value="${val}" data-off="${off + (c * 8)}"></td>`;
+                        let val = mainView.getFloat64(offset + (c * 8), true);
+                        finalHtml += `<td><input type="number" step="any" value="${val}" data-off="${offset + (c * 8)}"></td>`;
                     }
-                    html += `</tr>`;
+                    finalHtml += `</tr>`;
                 }
             } else {
-                // Para Source 13: mostramos los primeros 6 valores de configuración
-                html += `<tr><td>META</td>`;
+                // Configuración (Source 13)
+                finalHtml += `<tr><td>META</td>`;
                 for (let c = 0; c < 6; c++) {
-                    let off = block.dataStart + (c * 8);
-                    if (off + 8 <= end) {
-                        let val = dataView.getFloat64(off, true);
-                        html += `<td><input type="number" step="any" value="${val}" data-off="${off}"></td>`;
+                    let offset = block.dataStart + (c * 8);
+                    if (offset + 8 <= nextStart) {
+                        let val = mainView.getFloat64(offset, true);
+                        finalHtml += `<td><input type="number" step="any" value="${val}" data-off="${offset}"></td>`;
                     }
                 }
-                html += `</tr>`;
+                finalHtml += `</tr>`;
             }
-            html += `</table>`;
+
+            finalHtml += `</tbody></table></div></div>`;
         });
 
-        out.innerHTML = html;
+        editor.innerHTML = finalHtml;
+        saveBtn.style.display = "block";
+        log("TABLAS LISTAS PARA EDITAR");
     }
 
     function save() {
+        log("Compilando cambios...");
         const inputs = document.querySelectorAll('input[data-off]');
         inputs.forEach(input => {
             let off = parseInt(input.dataset.off);
             let val = parseFloat(input.value);
-            dataView.setFloat64(off, val, true);
+            mainView.setFloat64(off, val, true);
         });
 
-        const blob = new Blob([rawBuffer], {type: "application/octet-stream"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "EDITADO.MgComp";
-        a.click();
+        const blob = new Blob([mainBuffer], {type: "application/octet-stream"});
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "MAESTRO_EDITADO.MgComp";
+        link.click();
+        log("ARCHIVO DESCARGADO.");
     }
 </script>
 </body>
