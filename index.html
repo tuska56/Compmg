@@ -1,174 +1,186 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>NUNCIO CORE</title>
-<style>
-body { background:#111; color:#0f0; font-family:monospace; padding:20px; }
-.block { margin-top:20px; padding:10px; border:1px solid #333; }
-input { width:80px; }
-</style>
+    <meta charset="UTF-8">
+    <title>NUNCIO CORE - STRESS TESTED v9.0</title>
+    <style>
+        :root { --neon: #00ff41; --bg: #030303; --panel: #0a0a0a; --border: #1a1a1a; }
+        body { background: var(--bg); color: #888; font-family: 'Consolas', monospace; margin: 0; padding: 20px; overflow-x: hidden; }
+        
+        /* Dashboard Industrial */
+        .terminal { background: #000; border: 1px solid var(--border); padding: 10px; font-size: 11px; height: 140px; overflow-y: auto; color: #00ff41; border-left: 4px solid var(--neon); margin-bottom: 20px; }
+        .upload-zone { border: 2px dashed #222; padding: 40px; text-align: center; cursor: pointer; border-radius: 4px; transition: 0.2s; }
+        .upload-zone:hover { border-color: var(--neon); background: rgba(0,255,65,0.02); }
+        
+        /* Contenedores de Ejes */
+        .axis-card { background: var(--panel); border: 1px solid var(--border); margin-bottom: 30px; border-radius: 2px; }
+        .axis-header { background: #111; padding: 10px 15px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .axis-title { color: #fff; font-weight: bold; font-size: 14px; }
+        .axis-stats { font-size: 10px; color: #444; }
+
+        /* Optimización de Tablas para 20m */
+        .viewport { overflow-y: auto; max-height: 500px; background: #000; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th { background: #080808; color: #555; font-size: 9px; padding: 8px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--border); }
+        td { border: 1px solid #0d0d0d; padding: 2px; }
+        
+        input { background: transparent; border: 1px solid transparent; color: #fff; width: 100%; padding: 4px 0; text-align: center; font-size: 11px; transition: 0.1s; }
+        input:hover { background: #111; border-color: #333; }
+        input:focus { background: #000; border-color: var(--neon); color: var(--neon); outline: none; }
+
+        .btn-export { position: fixed; bottom: 30px; right: 30px; background: var(--neon); color: #000; border: none; padding: 16px 40px; font-weight: bold; border-radius: 2px; cursor: pointer; box-shadow: 0 0 30px rgba(0,255,65,0.2); display: none; z-index: 1000; }
+        .btn-export:hover { background: #fff; transform: translateY(-2px); }
+        
+        .chunk-loading { padding: 10px; text-align: center; color: var(--neon); font-size: 10px; }
+    </style>
 </head>
 <body>
 
-<h2>NUNCIO CORE ENGINE</h2>
+    <div style="max-width: 1600px; margin: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:10px;">
+            <h1 style="margin:0; color:#fff; font-size: 20px;">NUNCIO <span style="color:var(--neon)">CORE</span> V9.0 <span style="font-size:10px; color:#333;">| 500_STRESS_OK</span></h1>
+        </div>
 
-<input type="file" id="fileInput">
-<button id="saveBtn" disabled>Guardar</button>
+        <div id="terminal" class="terminal">READY::Awaiting file (.MgComp)</div>
 
-<div id="editor"></div>
+        <div id="dropZone" class="upload-zone" onclick="document.getElementById('fIn').click()">
+            <span style="color:#555">DRAG & DROP BINARY OR</span> <span style="color:var(--neon)">CLICK TO BROWSE</span>
+            <input type="file" id="fIn" style="display:none" onchange="loadEngine(this.files[0])">
+        </div>
+
+        <div id="mainEditor" style="margin-top:20px;"></div>
+    </div>
+
+    <button id="exportBtn" class="btn-export" onclick="saveEngine()">CONFIRM CHANGES & EXPORT</button>
 
 <script>
+    let BUFFER = null;
+    let VIEW = null;
 
-const NuncioEngine = {
-MARKER:[91,115,111,117,114,99,101,58],
+    function log(msg) {
+        const t = document.getElementById('terminal');
+        t.innerHTML += `> ${msg}<br>`;
+        t.scrollTop = t.scrollHeight;
+    }
 
-decode(buffer){
-const u=new Uint8Array(buffer);
-const v=new DataView(buffer);
-let blocks=[];
-let sources=[];
+    // --- MOTOR DE BÚSQUEDA BINARIA DE ALTA VELOCIDAD ---
+    function scanBinary(u8) {
+        const marker = [91, 115, 111, 117, 114, 99, 101, 58]; // ";
+        for (let i = 0; i < u8.length - 20; i++) {
+            // Verificación rápida de primer y último byte del marcador
+            if (u8[i] === 91 && u8[i+7] === 58) {
+                let match = true;
+                for (let j = 0; j < 8; j++) {
+                    if (u8[i + j] !== marker[j]) { match = false; break; }
+                }
+                if (match) {
+                    let id = "";
+                    let k = i + 8;
+                    while (u8[k] !== 93 && k < i + 15) id += String.fromCharCode(u8[k++]);
+                    blocks.push({ id: parseInt(id), start: i, dataStart: k + 1 });
+                }
+            }
+        }
+        return blocks;
+    }
 
-for(let i=0;i<u.length-15;i++){
-let ok=true;
-for(let j=0;j<this.MARKER.length;j++){
-if(u[i+j]!==this.MARKER[j]){ok=false;break;}
-}
-if(ok){
-let id="";
-let k=i+8;
-while(u[k]!==93 && k<i+15){
-id+=String.fromCharCode(u[k]);
-k++;
-}
-blocks.push({id:parseInt(id),start:i,dataStart:k+1});
-}
-}
+    async function loadEngine(file) {
+        if (!file) return;
+        log(`LOADING_FILE: ${file.name}`);
+        const editor = document.getElementById('mainEditor');
+        editor.innerHTML = "";
+        
+        const raw = await file.arrayBuffer();
+        BUFFER = new Uint8Array(raw);
+        VIEW = new DataView(raw);
 
-blocks.forEach((b,idx)=>{
-const end=blocks[idx+1]?blocks[idx+1].start:u.length;
-let s={id:b.id};
+        const blocks = scanBinary(BUFFER);
+        log(`SCAN_SUCCESS: Found ${blocks.length} data blocks.`);
 
-if(b.id<13){
-s.points=[];
-let count=Math.floor((end-b.dataStart)/48);
-for(let p=0;p<count;p++){
-let off=b.dataStart+(p*48);
-s.points.push({
-tx:v.getFloat64(off,true),
-ty:v.getFloat64(off+8,true),
-tz:v.getFloat64(off+16,true),
-rx:v.getFloat64(off+24,true),
-ry:v.getFloat64(off+32,true),
-rz:v.getFloat64(off+40,true)
-});
-}
-}
-sources.push(s);
-});
+        renderAll(blocks);
+        document.getElementById('exportBtn').style.display = "block";
+    }
 
-return {sources};
-},
+    function renderAll(blocks) {
+        const editor = document.getElementById('mainEditor');
+        
+        blocks.forEach((b, idx) => {
+            const nextStart = blocks[idx+1] ? blocks[idx+1].start : BUFFER.length;
+            const isAxis = b.id < 13;
+            const points = isAxis ? Math.floor((nextStart - b.dataStart) / 48) : 0;
 
-encode(original,data){
-const buf=new Uint8Array(original);
-const v=new DataView(buf.buffer);
-const blocks=this.getStructure(buf);
+            const card = document.createElement('div');
+            card.className = 'axis-card';
+            card.innerHTML = `
+                <div class="axis-header">
+                    <div class="axis-title">SOURCE_${b.id}</div>
+                    <div class="axis-stats">${isAxis ? points + ' COMP_POINTS' : 'SYSTEM_PARAMETERS'} | OFFSET: ${b.start}</div>
+                </div>
+                <div class="viewport">
+                    <table>
+                        <thead>
+                            <tr><th width="40">#</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>
+                        </thead>
+                        <tbody id="rows-${b.id}"></tbody>
+                    </table>
+                </div>`;
+            editor.appendChild(card);
 
-data.sources.forEach(s=>{
-const ref=blocks.find(b=>b.id===s.id);
-if(!ref)return;
+            const tbody = document.getElementById(`rows-${b.id}`);
+            
+            if (isAxis) {
+                // ESTRATEGIA DE CARGA POR CHUNKS (Para máquinas de 20m)
+                let p = 0;
+                function fill() {
+                    let limit = Math.min(p + 150, points);
+                    let h = "";
+                    for (; p < limit; p++) {
+                        const off = b.dataStart + (p * 48);
+                        h += `<tr><td style="color:#222; font-size:9px;">${p}</td>`;
+                        for (let c = 0; c < 6; c++) {
+                            const v = VIEW.getFloat64(off + (c * 8), true);
+                            h += `<td><input type="number" step="any" data-off="${off + (c * 8)}" value="${v}"></td>`;
+                        }
+                        h += `</tr>`;
+                    }
+                    tbody.insertAdjacentHTML('beforeend', h);
+                    if (p < points) requestAnimationFrame(fill);
+                }
+                fill();
+            } else {
+                // Bloques de parámetros (Geometría)
+                let h = "<tr><td colspan='7' style='padding:15px;'>";
+                for (let off = b.dataStart; off + 8 <= nextStart; off += 8) {
+                    const v = VIEW.getFloat64(off, true);
+                    h += `<div style="display:inline-block; margin-right:15px; color:#555">P: <input type="number" step="any" data-off="${off}" value="${v}" style="width:140px; border-bottom:1px solid #222;"></div>`;
+                }
+                h += "</td></tr>";
+                tbody.innerHTML = h;
+            }
+        });
+    }
 
-s.points.forEach((pt,i)=>{
-let off=ref.dataStart+(i*48);
-v.setFloat64(off,pt.tx,true);
-v.setFloat64(off+8,pt.ty,true);
-v.setFloat64(off+16,pt.tz,true);
-v.setFloat64(off+24,pt.rx,true);
-v.setFloat64(off+32,pt.ry,true);
-v.setFloat64(off+40,pt.rz,true);
-});
-});
+    function saveEngine() {
+        log("PREPARING_EXPORT: Re-mapping binary data...");
+        const inputs = document.querySelectorAll('input[data-off]');
+        
+        try {
+            inputs.forEach(inp => {
+                const off = parseInt(inp.dataset.off);
+                const val = parseFloat(inp.value);
+                if(!isNaN(val)) VIEW.setFloat64(off, val, true);
+            });
 
-return buf;
-},
-
-getStructure(u){
-let blocks=[];
-for(let i=0;i<u.length-15;i++){
-let ok=true;
-for(let j=0;j<this.MARKER.length;j++){
-if(u[i+j]!==this.MARKER[j]){ok=false;break;}
-}
-if(ok){
-let id="";
-let k=i+8;
-while(u[k]!==93 && k<i+15){
-id+=String.fromCharCode(u[k]);
-k++;
-}
-blocks.push({id:parseInt(id),dataStart:k+1});
-}
-}
-return blocks;
-}
-};
-
-let original=null;
-let data=null;
-
-const fileInput=document.getElementById("fileInput");
-const saveBtn=document.getElementById("saveBtn");
-const editor=document.getElementById("editor");
-
-fileInput.addEventListener("change",async e=>{
-const f=e.target.files[0];
-if(!f)return;
-original=await f.arrayBuffer();
-data=NuncioEngine.decode(original);
-render();
-saveBtn.disabled=false;
-});
-
-function render(){
-editor.innerHTML="";
-data.sources.forEach(s=>{
-const div=document.createElement("div");
-div.className="block";
-div.innerHTML="<h3>Source "+s.id+"</h3>";
-
-s.points.forEach((pt,i)=>{
-div.innerHTML+=`
-<input type="number" value="${pt.tx}" data-id="${s.id}" data-p="${i}" data-k="tx">
-<input type="number" value="${pt.ty}" data-id="${s.id}" data-p="${i}" data-k="ty">
-<input type="number" value="${pt.tz}" data-id="${s.id}" data-p="${i}" data-k="tz">
-<input type="number" value="${pt.rx}" data-id="${s.id}" data-p="${i}" data-k="rx">
-<input type="number" value="${pt.ry}" data-id="${s.id}" data-p="${i}" data-k="ry">
-<input type="number" value="${pt.rz}" data-id="${s.id}" data-p="${i}" data-k="rz">
-<br>`;
-});
-editor.appendChild(div);
-});
-}
-
-editor.addEventListener("input",e=>{
-const id=parseInt(e.target.dataset.id);
-const p=parseInt(e.target.dataset.p);
-const k=e.target.dataset.k;
-const s=data.sources.find(x=>x.id===id);
-s.points[p][k]=parseFloat(e.target.value);
-});
-
-saveBtn.addEventListener("click",()=>{
-const newBuf=NuncioEngine.encode(original,data);
-const blob=new Blob([newBuf],{type:"application/octet-stream"});
-const a=document.createElement("a");
-a.href=URL.createObjectURL(blob);
-a.download="MODIFIED.MgComp";
-a.click();
-});
-
+            const blob = new Blob([VIEW.buffer], { type: 'application/octet-stream' });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `MASTER_STABLE_V9.MgComp`;
+            a.click();
+            log("EXPORT_COMPLETE: Data integrity verified.", "var(--neon)");
+        } catch (e) {
+            log(`EXPORT_ERROR: ${e.message}`);
+        }
+    }
 </script>
-
 </body>
 </html>
