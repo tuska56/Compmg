@@ -1,103 +1,123 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>RETO: CARGA TOTAL</title>
+    <meta charset="UTF-8">
+    <title>NUNCIO VISOR TOTAL</title>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; }
+        .log { border: 1px solid #333; padding: 10px; margin-bottom: 20px; color: #888; font-size: 12px; height: 100px; overflow-y: scroll; }
+        .axis-section { border: 1px solid #0f0; margin-bottom: 30px; background: #050505; }
+        .axis-header { background: #0f0; color: #000; padding: 5px 10px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #222; padding: 4px; text-align: right; font-size: 12px; }
+        th { color: #0f0; background: #111; position: sticky; top: 0; }
+        .loading { color: yellow; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <h2>1. Selecciona el fichero .MgComp</h2>
-    <input type="file" id="f" onchange="leer(this)">
-    
-    <div id="status" style="color: blue; font-family: monospace; margin: 20px 0;"></div>
-    
-    <button id="btnSave" style="display:none; padding: 10px; background: green; color: white;" onclick="guardar()">DESCARGAR EDITADO</button>
 
-    <div id="tablas"></div>
+    <h2>NUNCIO_GEOMETRIC_VISOR_v1.0</h2>
+    
+    <div id="statusLog" class="log">SISTEMA INICIADO. Esperando archivo...</div>
+
+    <input type="file" id="fileInput" style="padding: 20px; border: 2px dashed #0f0; width: 100%; cursor: pointer;">
+
+    <div id="outputArea"></div>
 
 <script>
-    let buffer;
-    let vista;
+    const fileInput = document.getElementById('fileInput');
+    const logDiv = document.getElementById('statusLog');
+    const output = document.getElementById('outputArea');
 
-    function leer(input) {
-        const p = document.getElementById('status');
-        const file = input.files[0];
+    function log(msg) {
+        logDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    fileInput.onchange = function(e) {
+        const file = e.target.files[0];
         if (!file) return;
 
-        p.innerText = "Leyendo: " + file.name + "...";
-        
-        const r = new FileReader();
-        r.onload = function(e) {
-            buffer = new Uint8Array(e.target.result);
-            vista = new DataView(buffer.buffer);
-            p.innerText = "Cargado. Buscando datos...";
+        log(`Archivo seleccionado: ${file.name}`);
+        output.innerHTML = "<p class='loading'>PROCESANDO MATRIZ COMPLETA...</p>";
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const buffer = new Uint8Array(event.target.result);
+            const view = new DataView(buffer.buffer);
+            log("Fichero en memoria. Escaneando estructura binaria...");
             
-            procesar();
-        };
-        r.readAsArrayBuffer(file);
-    }
-
-    function procesar() {
-        const out = document.getElementById('tablas');
-        const text = new TextDecoder().decode(buffer);
-        const regex = /\/g;
-        let bloques = [];
-        let m;
-
-        while ((m = regex.exec(text)) !== null) {
-            bloques.push({id: m[1], inicio: m.index, datos: m.index + m[0].length + 2});
-        }
-
-        if (bloques.length === 0) {
-            document.getElementById('status').innerText = "ERROR: No se encontraron marcas [source].";
-            return;
-        }
-
-        let html = "";
-        bloques.forEach((b, i) => {
-            let fin = (bloques[i+1]) ? bloques[i+1].inicio : buffer.length;
-            let pts = (b.id < 13) ? Math.floor((fin - b.datos) / 48) : 0;
-            
-            html += "<h3>BLOQUE " + b.id + "</h3><table border='1'>";
-            
-            if (pts > 0) {
-                // Limitamos a 100 puntos para que la web no se cuelgue al pintar
-                for (let j = 0; j < Math.min(pts, 100); j++) {
-                    let off = b.datos + (j * 48);
-                    html += "<tr><td>P" + j + "</td>";
-                    for (let c = 0; c < 6; c++) {
-                        let v = vista.getFloat64(off + (c * 8), true);
-                        html += "<td><input type='number' step='any' data-off='" + (off + (c * 8)) + "' value='" + v + "'></td>";
+            // 1. Localizar los bloques de forma rápida
+            const bloques = [];
+            const marker = [91, 115, 111, 117, 114, 99, 101, 58]; // "!== marker[j]) { match = false; break; }
+                }
+                if (match) {
+                    let idStr = "";
+                    let k = i + 8;
+                    while (buffer[k] !== 93 && k < i + 15) { // 93 es "]"
+                        idStr += String.fromCharCode(buffer[k]);
+                        k++;
                     }
-                    html += "</tr>";
+                    bloques.push({ id: parseInt(idStr), start: i, dataStart: k + 1 });
+                    log(`Detectado BLOQUE ${idStr} en offset ${i}`);
+                }
+            }
+
+            // 2. Renderizar TODO
+            renderizarTodo(bloques, view, buffer.length);
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    function renderizarTodo(bloques, view, totalSize) {
+        let html = "";
+
+        bloques.forEach((b, idx) => {
+            const end = (bloques[idx + 1]) ? bloques[idx + 1].start : totalSize;
+            const size = end - b.dataStart;
+            const pts = (b.id < 13) ? Math.floor(size / 48) : 0;
+
+            html += `<div class="axis-section">
+                        <div class="axis-header">EJE / FUENTE: ${b.id} | PUNTOS TOTALES: ${pts}</div>
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table>
+                                <thead>
+                                    <tr><th>#</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>
+                                </thead>
+                                <tbody>`;
+
+            if (pts > 0) {
+                for (let p = 0; p < pts; p++) {
+                    const off = b.dataStart + (p * 48);
+                    html += `<tr><td>${p}</td>`;
+                    for (let c = 0; c < 6; c++) {
+                        try {
+                            const val = view.getFloat64(off + (c * 8), true);
+                            html += `<td>${val.toFixed(6)}</td>`;
+                        } catch(e) {
+                            html += `<td>ERR</td>`;
+                        }
+                    }
+                    html += `</tr>`;
                 }
             } else {
-                html += "<tr>";
+                // Para bloques de configuración (como el 13)
+                html += `<tr><td>CONFIG</td>`;
                 for (let c = 0; c < 6; c++) {
-                    let off = b.datos + (c * 8);
-                    if (off + 8 <= fin) {
-                        let v = vista.getFloat64(off, true);
-                        html += "<td><input type='number' step='any' data-off='" + off + "' value='" + v + "'></td>";
+                    const off = b.dataStart + (c * 8);
+                    if (off + 8 <= end) {
+                        const val = view.getFloat64(off, true);
+                        html += `<td>${val.toFixed(6)}</td>`;
                     }
                 }
-                html += "</tr>";
+                html += `</tr>`;
             }
-            html += "</table>";
+
+            html += `</tbody></table></div></div>`;
         });
 
-        out.innerHTML = html;
-        document.getElementById('btnSave').style.display = "block";
-        document.getElementById('status').innerText = "LISTO. Se muestran los primeros puntos de cada eje.";
-    }
-
-    function guardar() {
-        const inputs = document.querySelectorAll('input[data-off]');
-        inputs.forEach(i => {
-            vista.setFloat64(parseInt(i.dataset.off), parseFloat(i.value), true);
-        });
-        const blob = new Blob([buffer], {type: "application/octet-stream"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "nuevo_maestro.MgComp";
-        a.click();
+        output.innerHTML = html;
+        log("RENDERIZADO COMPLETO. Todos los datos visibles.");
     }
 </script>
 </body>
