@@ -1,135 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>NUNCIO CORE</title>
+<style>
+body { background:#111; color:#0f0; font-family:monospace; padding:20px; }
+.block { margin-top:20px; padding:10px; border:1px solid #333; }
+input { width:80px; }
+</style>
+</head>
+<body>
+
+<h2>NUNCIO CORE ENGINE</h2>
+
+<input type="file" id="fileInput">
+<button id="saveBtn" disabled>Guardar</button>
+
+<div id="editor"></div>
+
+<script>
+
 const NuncioEngine = {
-    // Marcador de inicio de bloque en el fichero ,
+MARKER:[91,115,111,117,114,99,101,58],
 
-    /**
-     * DESENCRIPTAR / LEER
-     * Convierte el ArrayBuffer del fichero en un objeto JSON con todos los datos.
-     */
-    decode: function(arrayBuffer) {
-        const uint8 = new Uint8Array(arrayBuffer);
-        const view = new DataView(arrayBuffer);
-        const results = {
-            metadata: { size: uint8.length, timestamp: new Date() },
-            sources: []
-        };
+decode(buffer){
+const u=new Uint8Array(buffer);
+const v=new DataView(buffer);
+let blocks=[];
+let sources=[];
 
-        // 1. Escaneo de estructura (Localizar etiquetas )
-        let blocks = [];
-        for (let i = 0; i < uint8.length - 15; i++) {
-            let match = true;
-            for (let j = 0; j < this.MARKER.length; j++) {
-                if (uint8[i + j] !== this.MARKER[j]) { match = false; break; }
-            }
-            if (match) {
-                let idStr = "";
-                let k = i + 8;
-                while (uint8[k] !== 93 && k < i + 15) { // 93 es "]"
-                    idStr += String.fromCharCode(uint8[k]);
-                    k++;
-                }
-                blocks.push({ id: parseInt(idStr), start: i, dataStart: k + 1 });
-            }
-        }
+for(let i=0;i<u.length-15;i++){
+let ok=true;
+for(let j=0;j<this.MARKER.length;j++){
+if(u[i+j]!==this.MARKER[j]){ok=false;break;}
+}
+if(ok){
+let id="";
+let k=i+8;
+while(u[k]!==93 && k<i+15){
+id+=String.fromCharCode(u[k]);
+k++;
+}
+blocks.push({id:parseInt(id),start:i,dataStart:k+1});
+}
+}
 
-        // 2. Extracción de datos numéricos
-        blocks.forEach((block, idx) => {
-            const end = (blocks[idx + 1]) ? blocks[idx + 1].start : uint8.length;
-            const sourceData = {
-                id: block.id,
-                points: []
-            };
+blocks.forEach((b,idx)=>{
+const end=blocks[idx+1]?blocks[idx+1].start:u.length;
+let s={id:b.id};
 
-            // Si es un eje (ID 1 al 12), leemos paquetes de 48 bytes (6 doubles)
-            if (block.id < 13) {
-                const numPoints = Math.floor((end - block.dataStart) / 48);
-                for (let p = 0; p < numPoints; p++) {
-                    let offset = block.dataStart + (p * 48);
-                    sourceData.points.push({
-                        tx: view.getFloat64(offset, true),
-                        ty: view.getFloat64(offset + 8, true),
-                        tz: view.getFloat64(offset + 16, true),
-                        rx: view.getFloat64(offset + 24, true),
-                        ry: view.getFloat64(offset + 32, true),
-                        rz: view.getFloat64(offset + 40, true)
-                    });
-                }
-            } else {
-                // Bloque 13 o superiores (Configuración/Metadatos)
-                // Leemos los valores como una lista simple de parámetros
-                sourceData.params = [];
-                for (let offset = block.dataStart; offset + 8 <= end; offset += 8) {
-                    sourceData.params.push(view.getFloat64(offset, true));
-                }
-            }
-            results.sources.push(sourceData);
-        });
+if(b.id<13){
+s.points=[];
+let count=Math.floor((end-b.dataStart)/48);
+for(let p=0;p<count;p++){
+let off=b.dataStart+(p*48);
+s.points.push({
+tx:v.getFloat64(off,true),
+ty:v.getFloat64(off+8,true),
+tz:v.getFloat64(off+16,true),
+rx:v.getFloat64(off+24,true),
+ry:v.getFloat64(off+32,true),
+rz:v.getFloat64(off+40,true)
+});
+}
+}
+sources.push(s);
+});
 
-        return results;
-    },
+return {sources};
+},
 
-    /**
-     * ENCRIPTAR / GENERAR
-     * Toma el buffer original y los nuevos datos para generar el fichero compatible.
-     * Inyecta los datos en el molde original para garantizar compatibilidad.
-     */
-    encode: function(originalBuffer, updatedData) {
-        // Creamos una copia del buffer para no destruir el original
-        const newBuffer = new Uint8Array(originalBuffer);
-        const view = new DataView(newBuffer.buffer);
+encode(original,data){
+const buf=new Uint8Array(original);
+const v=new DataView(buf.buffer);
+const blocks=this.getStructure(buf);
 
-        // Mapeamos los bloques del buffer para saber dónde escribir
-        const blocks = this.getStructure(newBuffer);
+data.sources.forEach(s=>{
+const ref=blocks.find(b=>b.id===s.id);
+if(!ref)return;
 
-        updatedData.sources.forEach(source => {
-            const blockRef = blocks.find(b => b.id === source.id);
-            if (!blockRef) return;
+s.points.forEach((pt,i)=>{
+let off=ref.dataStart+(i*48);
+v.setFloat64(off,pt.tx,true);
+v.setFloat64(off+8,pt.ty,true);
+v.setFloat64(off+16,pt.tz,true);
+v.setFloat64(off+24,pt.rx,true);
+v.setFloat64(off+32,pt.ry,true);
+v.setFloat64(off+40,pt.rz,true);
+});
+});
 
-            if (source.points) {
-                source.points.forEach((pt, pIdx) => {
-                    let offset = blockRef.dataStart + (pIdx * 48);
-                    // Inyección de los 6 parámetros por punto
-                    if (offset + 48 <= newBuffer.length) {
-                        view.setFloat64(offset, pt.tx, true);
-                        view.setFloat64(offset + 8, pt.ty, true);
-                        view.setFloat64(offset + 16, pt.tz, true);
-                        view.setFloat64(offset + 24, pt.rx, true);
-                        view.setFloat64(offset + 32, pt.ry, true);
-                        view.setFloat64(offset + 40, pt.rz, true);
-                    }
-                });
-            } else if (source.params) {
-                source.params.forEach((val, vIdx) => {
-                    let offset = blockRef.dataStart + (vIdx * 8);
-                    if (offset + 8 <= newBuffer.length) {
-                        view.setFloat64(offset, val, true);
-                    }
-                });
-            }
-        });
+return buf;
+},
 
-        return newBuffer;
-    },
-
-    /**
-     * Función auxiliar para mapear la estructura sin extraer datos
-     */
-    getStructure: function(uint8) {
-        let blocks = [];
-        for (let i = 0; i < uint8.length - 15; i++) {
-            let match = true;
-            for (let j = 0; j < this.MARKER.length; j++) {
-                if (uint8[i + j] !== this.MARKER[j]) { match = false; break; }
-            }
-            if (match) {
-                let idStr = "";
-                let k = i + 8;
-                while (uint8[k] !== 93 && k < i + 15) {
-                    idStr += String.fromCharCode(uint8[k]);
-                    k++;
-                }
-                blocks.push({ id: parseInt(idStr), dataStart: k + 1 });
-            }
-        }
-        return blocks;
-    }
+getStructure(u){
+let blocks=[];
+for(let i=0;i<u.length-15;i++){
+let ok=true;
+for(let j=0;j<this.MARKER.length;j++){
+if(u[i+j]!==this.MARKER[j]){ok=false;break;}
+}
+if(ok){
+let id="";
+let k=i+8;
+while(u[k]!==93 && k<i+15){
+id+=String.fromCharCode(u[k]);
+k++;
+}
+blocks.push({id:parseInt(id),dataStart:k+1});
+}
+}
+return blocks;
+}
 };
+
+let original=null;
+let data=null;
+
+const fileInput=document.getElementById("fileInput");
+const saveBtn=document.getElementById("saveBtn");
+const editor=document.getElementById("editor");
+
+fileInput.addEventListener("change",async e=>{
+const f=e.target.files[0];
+if(!f)return;
+original=await f.arrayBuffer();
+data=NuncioEngine.decode(original);
+render();
+saveBtn.disabled=false;
+});
+
+function render(){
+editor.innerHTML="";
+data.sources.forEach(s=>{
+const div=document.createElement("div");
+div.className="block";
+div.innerHTML="<h3>Source "+s.id+"</h3>";
+
+s.points.forEach((pt,i)=>{
+div.innerHTML+=`
+<input type="number" value="${pt.tx}" data-id="${s.id}" data-p="${i}" data-k="tx">
+<input type="number" value="${pt.ty}" data-id="${s.id}" data-p="${i}" data-k="ty">
+<input type="number" value="${pt.tz}" data-id="${s.id}" data-p="${i}" data-k="tz">
+<input type="number" value="${pt.rx}" data-id="${s.id}" data-p="${i}" data-k="rx">
+<input type="number" value="${pt.ry}" data-id="${s.id}" data-p="${i}" data-k="ry">
+<input type="number" value="${pt.rz}" data-id="${s.id}" data-p="${i}" data-k="rz">
+<br>`;
+});
+editor.appendChild(div);
+});
+}
+
+editor.addEventListener("input",e=>{
+const id=parseInt(e.target.dataset.id);
+const p=parseInt(e.target.dataset.p);
+const k=e.target.dataset.k;
+const s=data.sources.find(x=>x.id===id);
+s.points[p][k]=parseFloat(e.target.value);
+});
+
+saveBtn.addEventListener("click",()=>{
+const newBuf=NuncioEngine.encode(original,data);
+const blob=new Blob([newBuf],{type:"application/octet-stream"});
+const a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="MODIFIED.MgComp";
+a.click();
+});
+
+</script>
+
+</body>
+</html>
