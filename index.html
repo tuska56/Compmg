@@ -2,159 +2,144 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>NUNCIO MG-COMP DEBUGGER</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NUNCIO CORE | Industrial Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #00ff00; padding: 20px; }
-        .panel { border: 2px solid #00ff00; padding: 20px; background: #000; margin-bottom: 20px; }
-        #log { font-size: 14px; color: #aaa; margin-bottom: 10px; border-left: 3px solid #444; padding-left: 10px; }
-        .axis-box { border: 1px solid #333; margin-top: 15px; background: #222; }
-        .axis-title { background: #00ff00; color: #000; padding: 5px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; background: #000; }
-        th, td { border: 1px solid #333; padding: 4px; font-size: 11px; color: #fff; }
-        input { background: #000; color: #00ff00; border: 1px solid #444; width: 80px; font-size: 11px; }
-        .btn-save { position: fixed; top: 20px; right: 20px; padding: 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; display: none; }
-        .error { color: #ff0000; font-weight: bold; padding: 10px; border: 1px solid #ff0000; }
+        body { background-color: #0f172a; color: #f8fafc; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .input-field { background: #0f172a; border: 1px solid #334155; color: #22c55e; font-family: monospace; }
+        .input-field:focus { border-color: #22c55e; outline: none; box-shadow: 0 0 10px rgba(34, 197, 94, 0.2); }
+        .status-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
-<body>
+<body class="p-4 md:p-8 custom-scroll">
 
-    <div class="panel">
-        <h2>SISTEMA DE EDICIÓN MG-COMP</h2>
-        <input type="file" id="fileInput" accept=".MgComp">
-        <div id="log">Estado: Esperando archivo...</div>
+    <div class="max-w-6xl mx-auto flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tighter text-white">NUNCIO <span class="text-green-500">CORE</span></h1>
+            <p class="text-slate-400 text-sm font-mono" id="statusLine">READY_FOR_INPUT >_</p>
+        </div>
+        <button id="downloadBtn" onclick="exportData()" class="hidden glass px-6 py-3 rounded-lg text-green-500 font-bold hover:bg-green-500 hover:text-slate-900 transition-all shadow-lg shadow-green-500/10">
+            EXPORT MASTER .MgComp
+        </button>
     </div>
 
-    <button id="saveBtn" class="btn-save" onclick="save()">GENERAR NUEVO .MgComp</button>
+    <div id="dropZone" class="max-w-6xl mx-auto glass rounded-2xl p-12 text-center border-2 border-dashed border-slate-700 hover:border-green-500 transition-all cursor-pointer group">
+        <input type="file" id="fileInput" class="hidden" accept=".MgComp">
+        <div class="mb-4 text-slate-500 group-hover:text-green-500 transition-colors">
+            <svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        </div>
+        <p class="text-xl font-medium text-slate-300">Arrastra el fichero de compensación o haz clic</p>
+        <p class="text-slate-500 text-sm mt-2">Compatible con formatos binarios MgComp 21-Parámetros</p>
+    </div>
 
-    <div id="editor"></div>
+    <div id="editorGrid" class="max-w-6xl mx-auto space-y-6"></div>
 
-<script>
-    const fileInput = document.getElementById('fileInput');
-    const logDiv = document.getElementById('log');
-    const editor = document.getElementById('editor');
-    const saveBtn = document.getElementById('saveBtn');
+    <script>
+        let fileBuffer = null;
+        let dataView = null;
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const statusLine = document.getElementById('statusLine');
+        const editorGrid = document.getElementById('editorGrid');
+        const downloadBtn = document.getElementById('downloadBtn');
 
-    let mainBuffer = null;
-    let mainView = null;
-
-    function log(msg, isError = false) {
-        const time = new Date().toLocaleTimeString();
-        logDiv.innerHTML = `<span style="color:${isError ? 'red' : '#0f0'}">[${time}] ${msg}</span>`;
-        console.log(msg);
-    }
-
-    fileInput.onchange = function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        log(`Leyendo archivo: ${file.name} (${(file.size / 1024).toFixed(2)} KB)...`);
-        editor.innerHTML = ""; // Limpiar previo
-
-        const reader = new FileReader();
+        // Handlers
+        dropZone.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => loadFile(e.target.files[0]);
         
-        reader.onerror = () => log("Error al leer el archivo físico", true);
-        
-        reader.onload = function(event) {
+        async function loadFile(file) {
+            if(!file) return;
+            statusLine.innerHTML = `<span class="status-pulse text-blue-400">LOADING_FILE: ${file.name.toUpperCase()}...</span>`;
+            
             try {
-                const arrayBuffer = event.target.result;
-                mainBuffer = new Uint8Array(arrayBuffer);
-                mainView = new DataView(arrayBuffer);
+                const arrayBuffer = await file.arrayBuffer();
+                fileBuffer = new Uint8Array(arrayBuffer);
+                dataView = new DataView(arrayBuffer);
                 
-                log("Archivo en memoria. Buscando estructura de datos...");
-                renderContent();
+                parseAndRender();
+                
+                dropZone.classList.add('hidden');
+                downloadBtn.classList.remove('hidden');
+                statusLine.innerHTML = `<span class="text-green-500">SYSTEM_ONLINE // FILE_DECODED</span>`;
             } catch (err) {
-                log("FALLO CRÍTICO: " + err.message, true);
+                statusLine.innerHTML = `<span class="text-red-500">ERROR: ${err.message}</span>`;
             }
-        };
-        reader.readAsArrayBuffer(file);
-    };
+        }
 
-    function renderContent() {
-        const decoder = new TextDecoder();
-        // Leemos solo lo necesario para encontrar las etiquetas para evitar cuelgues
-        const textContent = decoder.decode(mainBuffer);
-        
-        const sourceRegex = /\/g;
-        let blocks = [];
-        let match;
+        function parseAndRender() {
+            const decoder = new TextDecoder();
+            const text = decoder.decode(fileBuffer);
+            const regex = /\/g;
+            let blocks = [];
+            let match;
 
-        while ((match = sourceRegex.exec(textContent)) !== null) {
-            blocks.push({
-                id: match[1],
-                start: match.index,
-                dataStart: match.index + match[0].length + 2
+            while ((match = regex.exec(text)) !== null) {
+                blocks.push({ id: match[1], start: match.index, dataStart: match.index + match[0].length + 2 });
+            }
+
+            editorGrid.innerHTML = "";
+            blocks.forEach((block, i) => {
+                const nextStart = blocks[i+1] ? blocks[i+1].start : fileBuffer.length;
+                const points = block.id < 13 ? Math.floor((nextStart - block.dataStart) / 48) : 0;
+                
+                const section = document.createElement('div');
+                section.className = "glass rounded-xl overflow-hidden";
+                
+                let content = `
+                    <div class="px-6 py-4 bg-slate-800/50 flex justify-between items-center border-b border-slate-700">
+                        <span class="font-mono font-bold text-green-500">SOURCE_${block.id}</span>
+                        <span class="text-xs text-slate-400 font-mono">${points > 0 ? points + ' DATA_POINTS' : 'GEOMETRY_CONFIG'}</span>
+                    </div>
+                    <div class="p-4 overflow-x-auto custom-scroll">
+                        <table class="w-full text-left font-mono text-xs text-slate-300">
+                            <thead>
+                                <tr class="text-slate-500 border-b border-slate-800">
+                                    <th class="p-2">PT</th><th class="p-2">TX</th><th class="p-2">TY</th><th class="p-2">TZ</th>
+                                    <th class="p-2">RX</th><th class="p-2">RY</th><th class="p-2">RZ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                if (points > 0) {
+                    const limit = Math.min(points, 500); // Protección de rendimiento
+                    for(let p=0; p < limit; p++) {
+                        const offset = block.dataStart + (p * 48);
+                        content += `<tr class="border-b border-slate-800/50 hover:bg-slate-700/20 transition-colors">
+                            <td class="p-2 text-slate-500">${p}</td>`;
+                        for(let c=0; c<6; c++) {
+                            const val = dataView.getFloat64(offset + (c*8), true);
+                            content += `<td class="p-1"><input type="number" step="any" data-off="${offset + (c*8)}" value="${val}" class="input-field w-24 p-1 rounded"></td>`;
+                        }
+                        content += `</tr>`;
+                    }
+                } else {
+                    content += `<tr><td class="p-4 text-slate-500 uppercase" colspan="7">System Parameters Offset Check...</td></tr>`;
+                }
+
+                content += `</tbody></table></div>`;
+                section.innerHTML = content;
+                editorGrid.appendChild(section);
             });
         }
 
-        if (blocks.length === 0) {
-            log("No se encontraron etiquetas ''. ¿Es el archivo correcto?", true);
-            return;
+        function exportData() {
+            document.querySelectorAll('input[data-off]').forEach(input => {
+                dataView.setFloat64(parseInt(input.dataset.off), parseFloat(input.value), true);
+            });
+            const blob = new Blob([dataView.buffer], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "MASTER_REV1.MgComp";
+            a.click();
+            statusLine.innerText = "SUCCESS: FILE_EXPORTED";
         }
-
-        log(`Detectados ${blocks.length} bloques. Renderizando tablas...`);
-        let finalHtml = "";
-
-        blocks.forEach((block, i) => {
-            let nextStart = (blocks[i+1]) ? blocks[i+1].start : mainBuffer.length;
-            let byteSize = nextStart - block.dataStart;
-            let numPoints = (block.id < 13) ? Math.floor(byteSize / 48) : 0;
-
-            finalHtml += `<div class="axis-box">
-                <div class="axis-title">BLOQUE ${block.id} | Puntos: ${numPoints}</div>
-                <div style="overflow-x:auto;">
-                    <table>
-                        <thead><tr><th>PTO</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr></thead>
-                        <tbody>`;
-
-            if (numPoints > 0) {
-                // Limitar a los primeros 500 puntos por bloque para no colapsar el navegador si es gigante
-                let limit = Math.min(numPoints, 1000); 
-                for (let p = 0; p < limit; p++) {
-                    let offset = block.dataStart + (p * 48);
-                    finalHtml += `<tr><td>${p}</td>`;
-                    for (let c = 0; c < 6; c++) {
-                        let val = mainView.getFloat64(offset + (c * 8), true);
-                        finalHtml += `<td><input type="number" step="any" value="${val}" data-off="${offset + (c * 8)}"></td>`;
-                    }
-                    finalHtml += `</tr>`;
-                }
-            } else {
-                // Configuración (Source 13)
-                finalHtml += `<tr><td>META</td>`;
-                for (let c = 0; c < 6; c++) {
-                    let offset = block.dataStart + (c * 8);
-                    if (offset + 8 <= nextStart) {
-                        let val = mainView.getFloat64(offset, true);
-                        finalHtml += `<td><input type="number" step="any" value="${val}" data-off="${offset}"></td>`;
-                    }
-                }
-                finalHtml += `</tr>`;
-            }
-
-            finalHtml += `</tbody></table></div></div>`;
-        });
-
-        editor.innerHTML = finalHtml;
-        saveBtn.style.display = "block";
-        log("TABLAS LISTAS PARA EDITAR");
-    }
-
-    function save() {
-        log("Compilando cambios...");
-        const inputs = document.querySelectorAll('input[data-off]');
-        inputs.forEach(input => {
-            let off = parseInt(input.dataset.off);
-            let val = parseFloat(input.value);
-            mainView.setFloat64(off, val, true);
-        });
-
-        const blob = new Blob([mainBuffer], {type: "application/octet-stream"});
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "MAESTRO_EDITADO.MgComp";
-        link.click();
-        log("ARCHIVO DESCARGADO.");
-    }
-</script>
+    </script>
 </body>
 </html>
