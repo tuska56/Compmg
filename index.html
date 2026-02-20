@@ -2,123 +2,179 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>NUNCIO VISOR TOTAL</title>
+    <title>NUNCIO CORE ENGINE | HTML5 Edition</title>
     <style>
-        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; }
-        .log { border: 1px solid #333; padding: 10px; margin-bottom: 20px; color: #888; font-size: 12px; height: 100px; overflow-y: scroll; }
-        .axis-section { border: 1px solid #0f0; margin-bottom: 30px; background: #050505; }
-        .axis-header { background: #0f0; color: #000; padding: 5px 10px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #222; padding: 4px; text-align: right; font-size: 12px; }
-        th { color: #0f0; background: #111; position: sticky; top: 0; }
-        .loading { color: yellow; font-weight: bold; }
+        :root { --accent: #00ff00; --bg: #0a0a0c; --card: #16161a; }
+        body { background: var(--bg); color: #e0e0e0; font-family: 'Segoe UI', monospace; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; }
+        
+        /* Dashboard Estilo App */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+        .status-dot { height: 10px; width: 10px; background: #555; border-radius: 50%; display: inline-block; margin-right: 10px; }
+        .status-active { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+        
+        /* Zona de Carga */
+        .upload-area { border: 2px dashed #333; border-radius: 12px; padding: 40px; text-align: center; transition: 0.3s; cursor: pointer; }
+        .upload-area:hover { border-color: var(--accent); background: #111; }
+        
+        /* Tablas y Datos */
+        .source-card { background: var(--card); border-radius: 8px; margin-bottom: 20px; border: 1px solid #222; overflow: hidden; }
+        .source-header { background: #1e1e24; padding: 10px 20px; color: var(--accent); font-weight: bold; font-size: 13px; }
+        .table-container { max-height: 300px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #000; color: #666; text-align: left; padding: 8px; position: sticky; top: 0; }
+        td { padding: 6px 8px; border-bottom: 1px solid #222; }
+        input { background: transparent; border: 1px solid #333; color: #fff; width: 80px; padding: 2px; border-radius: 3px; }
+        input:focus { border-color: var(--accent); outline: none; }
+
+        /* Botón Flotante */
+        .fab { position: fixed; bottom: 30px; right: 30px; background: var(--accent); color: #000; border: none; padding: 15px 30px; border-radius: 50px; font-weight: bold; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.5); display: none; }
     </style>
 </head>
 <body>
 
-    <h2>NUNCIO_GEOMETRIC_VISOR_v1.0</h2>
-    
-    <div id="statusLog" class="log">SISTEMA INICIADO. Esperando archivo...</div>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1 style="margin:0; font-size: 24px;">NUNCIO <span style="color:var(--accent)">CORE</span></h1>
+            <p style="margin:5px 0; color:#666; font-size: 12px;"><span id="dot" class="status-dot"></span> <span id="statusTxt">AWAITING_BINARY_STREAM</span></p>
+        </div>
+        <div id="fileInfo" style="text-align: right; color: #888; font-size: 12px;"></div>
+    </div>
 
-    <input type="file" id="fileInput" style="padding: 20px; border: 2px dashed #0f0; width: 100%; cursor: pointer;">
+    <div id="dropZone" class="upload-area">
+        <p>Selecciona o arrastra el fichero <strong>.MgComp</strong></p>
+        <input type="file" id="fileInput" hidden>
+    </div>
 
-    <div id="outputArea"></div>
+    <div id="editor"></div>
+</div>
+
+<button id="saveBtn" class="fab" onclick="handleSave()">ENCRIPTAR Y DESCARGAR</button>
 
 <script>
-    const fileInput = document.getElementById('fileInput');
-    const logDiv = document.getElementById('statusLog');
-    const output = document.getElementById('outputArea');
-
-    function log(msg) {
-        logDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-        logDiv.scrollTop = logDiv.scrollHeight;
-    }
-
-    fileInput.onchange = function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        log(`Archivo seleccionado: ${file.name}`);
-        output.innerHTML = "<p class='loading'>PROCESANDO MATRIZ COMPLETA...</p>";
-
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const buffer = new Uint8Array(event.target.result);
-            const view = new DataView(buffer.buffer);
-            log("Fichero en memoria. Escaneando estructura binaria...");
+    // ==========================================
+    // CORE ENGINE (Lógica de Datos)
+    // ==========================================
+    const NuncioCore = {
+        MARKER: [91, 115, 111, 117, 114, 99, 101, 58], // ";
             
-            // 1. Localizar los bloques de forma rápida
-            const bloques = [];
-            const marker = [91, 115, 111, 117, 114, 99, 101, 58]; // "!== marker[j]) { match = false; break; }
-                }
-                if (match) {
+            // Buscar etiquetas
+            for (let i = 0; i < uint8.length - 15; i++) {
+                if (this.isMarker(uint8, i)) {
                     let idStr = "";
                     let k = i + 8;
-                    while (buffer[k] !== 93 && k < i + 15) { // 93 es "]"
-                        idStr += String.fromCharCode(buffer[k]);
-                        k++;
-                    }
-                    bloques.push({ id: parseInt(idStr), start: i, dataStart: k + 1 });
-                    log(`Detectado BLOQUE ${idStr} en offset ${i}`);
+                    while (uint8[k] !== 93 && k < i + 15) { idStr += String.fromCharCode(uint8[k++]); }
+                    blocks.push({ id: parseInt(idStr), start: i, dataStart: k + 1 });
                 }
             }
 
-            // 2. Renderizar TODO
-            renderizarTodo(bloques, view, buffer.length);
-        };
-        reader.readAsArrayBuffer(file);
+            // Mapear datos
+            return blocks.map((b, idx) => {
+                const end = blocks[idx + 1] ? blocks[idx + 1].start : uint8.length;
+                const isAxis = b.id < 13;
+                const points = [];
+                
+                if (isAxis) {
+                    const count = Math.floor((end - b.dataStart) / 48);
+                    for (let p = 0; p < count; p++) {
+                        let off = b.dataStart + (p * 48);
+                        points.push([
+                            view.getFloat64(off, true), view.getFloat64(off+8, true), view.getFloat64(off+16, true),
+                            view.getFloat64(off+24, true), view.getFloat64(off+32, true), view.getFloat64(off+40, true)
+                        ]);
+                    }
+                }
+                return { id: b.id, dataStart: b.dataStart, isAxis, points, end };
+            });
+        },
+
+        isMarker(arr, i) {
+            for (let j = 0; j < this.MARKER.length; j++) {
+                if (arr[i + j] !== this.MARKER[j]) return false;
+            }
+            return true;
+        }
     };
 
-    function renderizarTodo(bloques, view, totalSize) {
-        let html = "";
+    // ==========================================
+    // UI HANDLERS (Interfaz)
+    // ==========================================
+    let originalBuffer = null;
+    let decodedData = null;
 
-        bloques.forEach((b, idx) => {
-            const end = (bloques[idx + 1]) ? bloques[idx + 1].start : totalSize;
-            const size = end - b.dataStart;
-            const pts = (b.id < 13) ? Math.floor(size / 48) : 0;
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
 
-            html += `<div class="axis-section">
-                        <div class="axis-header">EJE / FUENTE: ${b.id} | PUNTOS TOTALES: ${pts}</div>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            <table>
-                                <thead>
-                                    <tr><th>#</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>
-                                </thead>
-                                <tbody>`;
+    dropZone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => process(e.target.files[0]);
 
-            if (pts > 0) {
-                for (let p = 0; p < pts; p++) {
-                    const off = b.dataStart + (p * 48);
-                    html += `<tr><td>${p}</td>`;
-                    for (let c = 0; c < 6; c++) {
-                        try {
-                            const val = view.getFloat64(off + (c * 8), true);
-                            html += `<td>${val.toFixed(6)}</td>`;
-                        } catch(e) {
-                            html += `<td>ERR</td>`;
-                        }
-                    }
-                    html += `</tr>`;
-                }
-            } else {
-                // Para bloques de configuración (como el 13)
-                html += `<tr><td>CONFIG</td>`;
-                for (let c = 0; c < 6; c++) {
-                    const off = b.dataStart + (c * 8);
-                    if (off + 8 <= end) {
-                        const val = view.getFloat64(off, true);
-                        html += `<td>${val.toFixed(6)}</td>`;
-                    }
-                }
-                html += `</tr>`;
-            }
+    async function process(file) {
+        if (!file) return;
+        
+        document.getElementById('statusTxt').innerText = "DECODING_DATA...";
+        originalBuffer = await file.arrayBuffer();
+        decodedData = NuncioCore.decode(originalBuffer);
 
-            html += `</tbody></table></div></div>`;
+        renderEditor();
+        
+        document.getElementById('dot').classList.add('status-active');
+        document.getElementById('statusTxt').innerText = "SYSTEM_READY";
+        document.getElementById('fileInfo').innerText = `${file.name} | ${(file.size/1024).toFixed(1)} KB`;
+        document.getElementById('saveBtn').style.display = "block";
+        dropZone.style.display = "none";
+    }
+
+    function renderEditor() {
+        const container = document.getElementById('editor');
+        container.innerHTML = decodedData.map(source => `
+            <div class="source-card">
+                <div class="source-header">BLOQUE [SOURCE ${source.id}] - ${source.isAxis ? source.points.length + ' PUNTOS' : 'CONFIG'}</div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>#</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>
+                        </thead>
+                        <tbody>
+                            ${source.isAxis ? 
+                                source.points.map((p, i) => `
+                                    <tr>
+                                        <td>${i}</td>
+                                        ${p.map((val, c) => `<td><input type="number" step="any" value="${val}" data-source="${source.id}" data-point="${i}" data-col="${c}"></td>`).join('')}
+                                    </tr>
+                                `).join('') 
+                                : `<tr><td colspan="7" style="text-align:center; padding:20px; color:#555">Configuración de geometría detectada (Double Precision)</td></tr>`
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function handleSave() {
+        const view = new DataView(originalBuffer);
+        const inputs = document.querySelectorAll('input');
+        
+        inputs.forEach(input => {
+            const sid = parseInt(input.dataset.source);
+            const pidx = parseInt(input.dataset.point);
+            const col = parseInt(input.dataset.col);
+            const val = parseFloat(input.value);
+            
+            const sourceRef = decodedData.find(s => s.id === sid);
+            const offset = sourceRef.dataStart + (pidx * 48) + (col * 8);
+            
+            view.setFloat64(offset, val, true);
         });
 
-        output.innerHTML = html;
-        log("RENDERIZADO COMPLETO. Todos los datos visibles.");
+        const blob = new Blob([originalBuffer], {type: 'application/octet-stream'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = "MASTER_MODIFIED.MgComp";
+        a.click();
     }
 </script>
+
 </body>
 </html>
