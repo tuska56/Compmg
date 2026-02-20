@@ -2,166 +2,171 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Nuncio MgComp Full Editor</title>
+    <title>NUNCIO MG-COMP MASTER EDITOR</title>
     <style>
-        body { font-family: 'Courier New', Courier, monospace; background: #1a1a1a; color: #e0e0e0; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: auto; background: #2d2d2d; padding: 30px; border-radius: 12px; border: 1px solid #444; }
-        h1 { color: #00ff00; text-align: center; text-transform: uppercase; letter-spacing: 2px; }
-        .file-upload { text-align: center; border: 2px dashed #555; padding: 40px; margin-bottom: 30px; border-radius: 8px; }
-        .file-upload:hover { border-color: #00ff00; background: #333; }
-        .axis-container { margin-bottom: 40px; background: #383838; border-radius: 8px; overflow: hidden; }
-        .axis-header { background: #444; padding: 10px 20px; font-weight: bold; color: #00ff00; cursor: pointer; display: flex; justify-content: space-between; }
-        .table-wrapper { overflow-x: auto; max-height: 400px; overflow-y: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { background: #222; position: sticky; top: 0; padding: 10px; border: 1px solid #444; }
-        td { padding: 5px; border: 1px solid #444; text-align: center; }
-        input { background: #111; color: #fff; border: 1px solid #555; padding: 4px; width: 80px; text-align: right; border-radius: 3px; }
-        input:focus { border-color: #00ff00; outline: none; }
-        .controls { position: fixed; bottom: 20px; right: 20px; display: flex; gap: 10px; }
-        .btn { padding: 15px 30px; border-radius: 5px; cursor: pointer; border: none; font-weight: bold; text-transform: uppercase; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        .btn-save { background: #00ff00; color: #000; }
-        .status-bar { position: sticky; top: 0; background: #000; padding: 5px 15px; font-size: 12px; color: #aaa; z-index: 100; border-radius: 4px; margin-bottom: 10px; }
+        body { font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #333; }
+        #dropZone { 
+            border: 3px dashed #444; padding: 50px; text-align: center; cursor: pointer; 
+            transition: 0.3s; margin-bottom: 20px; border-radius: 10px;
+        }
+        #dropZone:hover { border-color: #00ff00; background: #252525; }
+        #dropZone.active { border-color: #00ff00; background: #252525; }
+        .axis-box { background: #2d2d2d; margin-bottom: 15px; border-radius: 5px; overflow: hidden; }
+        .axis-title { background: #3d3d3d; padding: 10px; color: #00ff00; font-weight: bold; }
+        .scroll-area { max-height: 300px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #111; padding: 8px; border: 1px solid #444; position: sticky; top: 0; }
+        td { border: 1px solid #444; padding: 4px; }
+        input { background: #000; color: #00ff00; border: 1px solid #555; width: 70px; font-size: 11px; }
+        .save-bar { position: fixed; bottom: 20px; right: 20px; }
+        .btn { background: #00ff00; color: #000; padding: 15px 30px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
+        #status { color: #888; margin-bottom: 10px; font-family: monospace; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Nuncio Geometric Core Decryptor</h1>
-    <div id="statusBar" class="status-bar">Esperando entrada binaria...</div>
+    <h1>NUNCIO MG-COMP EDITOR <span style="font-size: 12px; color: #666;">v2.0</span></h1>
+    <div id="status">ESTADO: ESPERANDO ARCHIVO...</div>
 
-    <div class="file-upload" id="dropZone">
-        <p>Arrastra aquí el fichero <strong>.MgComp</strong> o haz clic para subir</p>
-        <input type="file" id="fileInput" accept=".MgComp" style="display:none">
+    <div id="dropZone">
+        <strong>ARRASTRA AQUÍ TU ARCHIVO .MgComp</strong><br>
+        o haz clic para buscarlo en tu PC
+        <input type="file" id="fileInput" style="display:none">
     </div>
 
-    <div id="mainEditor" style="display:none;">
-        </div>
+    <div id="editorArea"></div>
 </div>
 
-<div class="controls">
-    <button class="btn btn-save" onclick="exportBinary()">Generar Fichero Maestro</button>
+<div class="save-bar">
+    <button class="btn" onclick="downloadBinary()">GUARDAR CAMBIOS (.MgComp)</button>
 </div>
 
 <script>
-    let rawBuffer = null;
-    let view = null;
-    let structure = []; // Guardará objetos { sourceId, startOffset, length, points }
-
-    const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const status = document.getElementById('status');
+    const editorArea = document.getElementById('editorArea');
 
-    dropZone.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => processFile(e.target.files[0]);
+    let originalBuffer = null;
+    let dataView = null;
+    let blocks = [];
 
-    async function processFile(file) {
-        if (!file) return;
-        document.getElementById('statusBar').innerText = `Procesando: ${file.name}...`;
-        const buffer = await file.arrayBuffer();
-        rawBuffer = new Uint8Array(buffer);
-        view = new DataView(buffer);
+    // --- GESTIÓN DE EVENTOS DE CARGA ---
+    dropZone.addEventListener('click', () => fileInput.click());
+    
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('active');
+    });
+
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('active'));
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('active');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    async function handleFile(file) {
+        status.innerText = "ESTADO: LEYENDO BINARIO...";
+        const arrayBuffer = await file.arrayBuffer();
+        originalBuffer = new Uint8Array(arrayBuffer);
+        dataView = new DataView(arrayBuffer);
         
-        fullScan();
-        renderEditor();
+        parseFile();
+        renderUI();
         
-        document.getElementById('dropZone').style.display = 'none';
-        document.getElementById('mainEditor').style.display = 'block';
-        document.getElementById('statusBar').innerText = `Sincronización completa. ${structure.length} bloques detectados.`;
+        dropZone.style.display = "none";
+        status.innerText = `ESTADO: ARCHIVO "${file.name}" CARGADO Y DESCIFRADO.`;
+        status.style.color = "#00ff00";
     }
 
-    function fullScan() {
-        structure = [];
+    // --- LÓGICA DE DESCIFRADO COMPLETO ---
+    function parseFile() {
+        blocks = [];
         const decoder = new TextDecoder();
-        const content = decoder.decode(rawBuffer);
+        const fullContent = decoder.decode(originalBuffer);
         
-        // Buscamos todos los dinámicamente
-        const sourceRegex = /\/g;
+        const regex = /\/g;
         let match;
         
-        while ((match = sourceRegex.exec(content)) !== null) {
-            let id = parseInt(match[1]);
-            let start = match.index;
-            structure.push({ id, start, dataOffset: start + match[0].length + 2 }); // +2 para compensar saltos de línea
+        while ((match = regex.exec(fullContent)) !== null) {
+            blocks.push({
+                id: parseInt(match[1]),
+                start: match.index,
+                dataStart: match.index + match[0].length + 2 // Offset tras el tag
+            });
         }
 
-        // Definimos el final de cada bloque como el inicio del siguiente
-        for (let i = 0; i < structure.length; i++) {
-            let end = (i < structure.length - 1) ? structure[i+1].start : rawBuffer.length;
-            structure[i].end = end;
-            
-            // Calculamos cuántos puntos de 48 bytes (6 doubles) caben
-            let availableBytes = end - structure[i].dataOffset;
-            // Solo para sources de ejes (1-12), el 13 es configuración
-            structure[i].pointCount = (id => id < 13)(structure[i].id) ? Math.floor(availableBytes / 48) : 0;
+        // Calcular limites y puntos
+        for (let i = 0; i < blocks.length; i++) {
+            let end = (i < blocks.length - 1) ? blocks[i+1].start : originalBuffer.length;
+            blocks[i].end = end;
+            let size = end - blocks[i].dataStart;
+            // Si es un eje (source < 13), cada punto son 48 bytes (6 doubles)
+            blocks[i].points = blocks[i].id < 13 ? Math.floor(size / 48) : 0;
         }
     }
 
-    function renderEditor() {
-        const container = document.getElementById('mainEditor');
-        container.innerHTML = "";
-
-        structure.forEach(block => {
-            const section = document.createElement('div');
-            section.className = 'axis-container';
+    function renderUI() {
+        editorArea.innerHTML = "";
+        blocks.forEach(b => {
+            const div = document.createElement('div');
+            div.className = 'axis-box';
+            let content = `<div class="axis-title">BLOQUE [SOURCE ${b.id}] - ${b.points > 0 ? b.points + ' Puntos Detectados' : 'Configuración'}</div>`;
             
-            let html = `<div class="axis-header">SOURCE ${block.id} <span>${block.pointCount > 0 ? block.pointCount + ' puntos' : 'METADATOS'}</span></div>`;
-            
-            if (block.pointCount > 0) {
-                html += `<div class="table-wrapper"><table><thead><tr>
-                    <th>IDX</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th>
-                </tr></thead><tbody>`;
-                
-                for (let p = 0; p < block.pointCount; p++) {
-                    let offset = block.dataOffset + (p * 48);
-                    let vals = [];
-                    for (let i = 0; i < 6; i++) {
-                        vals.push(view.getFloat64(offset + (i * 8), true));
+            if (b.points > 0) {
+                content += `<div class="scroll-area"><table><tr><th>ID</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>`;
+                for (let p = 0; p < b.points; p++) {
+                    let offset = b.dataStart + (p * 48);
+                    content += `<tr><td>${p}</td>`;
+                    for (let c = 0; c < 6; c++) {
+                        let val = dataView.getFloat64(offset + (c * 8), true);
+                        content += `<td><input type="number" step="any" data-off="${offset + (c * 8)}" value="${val.toFixed(6)}"></td>`;
                     }
-                    html += `<tr>
-                        <td>${p}</td>
-                        ${vals.map((v, i) => `<td><input type="number" step="any" data-block="${block.id}" data-point="${p}" data-col="${i}" value="${v}"></td>`).join('')}
-                    </tr>`;
+                    content += `</tr>`;
                 }
-                html += `</tbody></table></div>`;
-            } else if (block.id === 13) {
-                // Render especial para constantes
-                html += `<div style="padding: 20px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">`;
-                for(let i=0; i<6; i++) {
-                    let off = block.dataOffset + (i*8);
-                    let v = view.getFloat64(off, true);
-                    html += `<div>Constante ${i}: <input type="number" step="any" data-block="13" data-point="0" data-col="${i}" value="${v}"></div>`;
+                content += `</table></div>`;
+            } else {
+                // Para Source 13 u otros metadatos (lectura directa de los primeros 6 doubles)
+                content += `<div style="padding:10px;">`;
+                for (let c = 0; c < 6; c++) {
+                    let offset = b.dataStart + (c * 8);
+                    if (offset + 8 <= b.end) {
+                        let val = dataView.getFloat64(offset, true);
+                        content += ` Parámetro ${c}: <input type="number" step="any" data-off="${offset}" value="${val.toFixed(6)}"> `;
+                    }
                 }
-                html += `</div>`;
+                content += `</div>`;
             }
-            
-            section.innerHTML = html;
-            container.appendChild(section);
+            div.innerHTML = content;
+            editorArea.appendChild(div);
         });
     }
 
-    function exportBinary() {
-        // Recoger todos los cambios de los inputs
-        const inputs = document.querySelectorAll('input[data-block]');
+    function downloadBinary() {
+        const inputs = document.querySelectorAll('input[data-off]');
         inputs.forEach(input => {
-            let bId = parseInt(input.dataset.block);
-            let pIdx = parseInt(input.dataset.point);
-            let cIdx = parseInt(input.dataset.col);
-            let val = parseFloat(input.value);
-            
-            let block = structure.find(b => b.id === bId);
-            let offset = block.dataOffset + (pIdx * 48) + (cIdx * 8);
-            
-            if (offset + 8 <= rawBuffer.length) {
-                view.setFloat64(offset, val, true);
-            }
+            const offset = parseInt(input.dataset.off);
+            const value = parseFloat(input.value);
+            dataView.setFloat64(offset, value, true);
         });
 
-        const blob = new Blob([rawBuffer], { type: 'application/octet-stream' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = "MASTER_DECRYPTED.MgComp";
-        link.click();
-        document.getElementById('statusBar').innerText = "Fichero Maestro exportado con éxito.";
+        const blob = new Blob([dataView.buffer], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "EDITADO_MAESTRO.MgComp";
+        a.click();
+        status.innerText = "ESTADO: ARCHIVO EXPORTADO CORRECTAMENTE.";
     }
 </script>
+
 </body>
 </html>
