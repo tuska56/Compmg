@@ -1,184 +1,104 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>NUNCIO CORE - DIAGNOSTIC MODE</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background: #050505; color: #00ff00; font-family: 'Courier New', monospace; }
-        .terminal { background: #000; border: 1px solid #00ff00; height: 300px; overflow-y: auto; font-size: 12px; padding: 10px; }
-        .data-card { background: #111; border-left: 4px solid #00ff00; margin-bottom: 20px; }
-        input[type="number"] { background: #000; color: #fff; border: 1px solid #333; width: 100%; padding: 2px; }
-    </style>
+    <title>RETO: CARGA TOTAL</title>
 </head>
-<body class="p-6">
+<body>
+    <h2>1. Selecciona el fichero .MgComp</h2>
+    <input type="file" id="f" onchange="leer(this)">
+    
+    <div id="status" style="color: blue; font-family: monospace; margin: 20px 0;"></div>
+    
+    <button id="btnSave" style="display:none; padding: 10px; background: green; color: white;" onclick="guardar()">DESCARGAR EDITADO</button>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div id="tablas"></div>
+
+<script>
+    let buffer;
+    let vista;
+
+    function leer(input) {
+        const p = document.getElementById('status');
+        const file = input.files[0];
+        if (!file) return;
+
+        p.innerText = "Leyendo: " + file.name + "...";
         
-        <div class="lg:col-span-1">
-            <h1 class="text-2xl font-bold mb-4">NUNCIO_CORE_v4.2</h1>
+        const r = new FileReader();
+        r.onload = function(e) {
+            buffer = new Uint8Array(e.target.result);
+            vista = new DataView(buffer.buffer);
+            p.innerText = "Cargado. Buscando datos...";
             
-            <div class="border-2 border-dashed border-green-900 p-8 text-center rounded-lg hover:bg-green-900/10 cursor-pointer mb-4" id="dropZone">
-                <input type="file" id="fileInput" class="hidden">
-                <p>CARGAR .MgComp</p>
-                <p class="text-xs text-green-700 mt-2">PINCHA O ARRASTRA</p>
-            </div>
-
-            <button id="saveBtn" class="hidden w-full bg-green-600 text-black font-bold py-4 rounded hover:bg-green-400" onclick="exportFile()">
-                GUARDAR CAMBIOS
-            </button>
-        </div>
-
-        <div class="lg:col-span-2">
-            <h3 class="text-xs uppercase text-green-800 mb-2">System Telemetry</h3>
-            <div id="terminal" class="terminal mb-4">
-                [SYSTEM] Ready. Awaiting file input...
-            </div>
-        </div>
-    </div>
-
-    <div id="editorArea" class="mt-8"></div>
-
-    <script>
-        const terminal = document.getElementById('terminal');
-        const editor = document.getElementById('editorArea');
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const saveBtn = document.getElementById('saveBtn');
-
-        let originalArrayBuffer = null;
-        let mainView = null;
-
-        function log(msg, color = "#00ff00") {
-            const entry = document.createElement('div');
-            entry.style.color = color;
-            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            terminal.appendChild(entry);
-            terminal.scrollTop = terminal.scrollHeight;
-        }
-
-        dropZone.onclick = () => fileInput.click();
-
-        fileInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) handleFile(file);
+            procesar();
         };
+        r.readAsArrayBuffer(file);
+    }
 
-        async function handleFile(file) {
-            log(`FILE_DETECTED: ${file.name}`);
-            log(`SIZE: ${file.size} bytes`);
+    function procesar() {
+        const out = document.getElementById('tablas');
+        const text = new TextDecoder().decode(buffer);
+        const regex = /\/g;
+        let bloques = [];
+        let m;
+
+        while ((m = regex.exec(text)) !== null) {
+            bloques.push({id: m[1], inicio: m.index, datos: m.index + m[0].length + 2});
+        }
+
+        if (bloques.length === 0) {
+            document.getElementById('status').innerText = "ERROR: No se encontraron marcas [source].";
+            return;
+        }
+
+        let html = "";
+        bloques.forEach((b, i) => {
+            let fin = (bloques[i+1]) ? bloques[i+1].inicio : buffer.length;
+            let pts = (b.id < 13) ? Math.floor((fin - b.datos) / 48) : 0;
             
-            try {
-                log("STARTING_BINARY_READ...");
-                const buffer = await file.arrayBuffer();
-                originalArrayBuffer = new Uint8Array(buffer);
-                mainView = new DataView(buffer);
-                log("ARRAY_BUFFER_LOADED_SUCCESSFULLY", "#fff");
-
-                log("SCANNING_FOR_STRUCTURE_TAGS...");
-                const decoder = new TextDecoder();
-                const text = decoder.decode(originalArrayBuffer);
-                
-                const regex = /\/g;
-                let blocks = [];
-                let match;
-                
-                while ((match = regex.exec(text)) !== null) {
-                    blocks.push({
-                        id: match[1],
-                        start: match.index,
-                        dataStart: match.index + match[0].length + 2
-                    });
-                    log(`FOUND_TAG: }] at offset ${match.index}`);
+            html += "<h3>BLOQUE " + b.id + "</h3><table border='1'>";
+            
+            if (pts > 0) {
+                // Limitamos a 100 puntos para que la web no se cuelgue al pintar
+                for (let j = 0; j < Math.min(pts, 100); j++) {
+                    let off = b.datos + (j * 48);
+                    html += "<tr><td>P" + j + "</td>";
+                    for (let c = 0; c < 6; c++) {
+                        let v = vista.getFloat64(off + (c * 8), true);
+                        html += "<td><input type='number' step='any' data-off='" + (off + (c * 8)) + "' value='" + v + "'></td>";
+                    }
+                    html += "</tr>";
                 }
-
-                if (blocks.length === 0) {
-                    throw new Error("No '' tags found in file. Format error.");
+            } else {
+                html += "<tr>";
+                for (let c = 0; c < 6; c++) {
+                    let off = b.datos + (c * 8);
+                    if (off + 8 <= fin) {
+                        let v = vista.getFloat64(off, true);
+                        html += "<td><input type='number' step='any' data-off='" + off + "' value='" + v + "'></td>";
+                    }
                 }
-
-                log(`TOTAL_BLOCKS_DETECTED: ${blocks.length}`, "#fff");
-                renderBlocks(blocks);
-
-            } catch (err) {
-                log(`CRITICAL_ERROR: ${err.message}`, "#ff0000");
-                console.error(err);
+                html += "</tr>";
             }
-        }
+            html += "</table>";
+        });
 
-        function renderBlocks(blocks) {
-            log("INITIATING_UI_RENDER...");
-            let html = "";
+        out.innerHTML = html;
+        document.getElementById('btnSave').style.display = "block";
+        document.getElementById('status').innerText = "LISTO. Se muestran los primeros puntos de cada eje.";
+    }
 
-            blocks.forEach((block, i) => {
-                const nextStart = blocks[i+1] ? blocks[i+1].start : originalArrayBuffer.length;
-                const byteRange = nextStart - block.dataStart;
-                const points = block.id < 13 ? Math.floor(byteRange / 48) : 0;
-
-                log(`RENDERING_SOURCE_${block.id}: ${points} points identified`);
-
-                html += `
-                <div class="data-card p-4 mb-6">
-                    <div class="text-lg font-bold text-white mb-2 underline">SOURCE_${block.id}</div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs">
-                            <thead>
-                                <tr class="text-green-700">
-                                    <th>#</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-
-                if (points > 0) {
-                    const renderLimit = Math.min(points, 200); // Límite para evitar cuelgues de RAM
-                    for (let p = 0; p < renderLimit; p++) {
-                        const offset = block.dataStart + (p * 48);
-                        html += `<tr class="border-b border-green-900/30 hover:bg-green-900/10">
-                            <td class="text-green-900">${p}</td>`;
-                        for (let c = 0; c < 6; c++) {
-                            const val = mainView.getFloat64(offset + (c * 8), true);
-                            html += `<td class="p-1"><input type="number" step="any" data-off="${offset + (c * 8)}" value="${val}"></td>`;
-                        }
-                        html += `</tr>`;
-                    }
-                    if (points > 200) log(`NOTICE: Source ${block.id} truncated to 200 for performance`, "#ffa500");
-                } else {
-                    log(`CONFIG_BLOCK_${block.id}: Extracting parameters...`);
-                    html += `<tr><td colspan="7" class="p-4">`;
-                    for(let c=0; c<6; c++) {
-                        const offset = block.dataStart + (c * 8);
-                        if(offset + 8 <= nextStart) {
-                            const val = mainView.getFloat64(offset, true);
-                            html += `<div class="inline-block mr-4">P${c}: <input type="number" step="any" data-off="${offset}" value="${val}" class="w-32"></div>`;
-                        }
-                    }
-                    html += `</td></tr>`;
-                }
-
-                html += `</tbody></table></div></div>`;
-            });
-
-            editor.innerHTML = html;
-            saveBtn.classList.remove('hidden');
-            log("UI_RENDER_COMPLETE. System stable.", "#fff");
-        }
-
-        function exportFile() {
-            log("PREPARING_EXPORT...");
-            const inputs = document.querySelectorAll('input[data-off]');
-            inputs.forEach(inp => {
-                const off = parseInt(inp.dataset.off);
-                const val = parseFloat(inp.value);
-                mainView.setFloat64(off, val, true);
-            });
-
-            const blob = new Blob([mainView.buffer], { type: 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "MASTER_REV4.MgComp";
-            a.click();
-            log("EXPORT_FINISHED. File downloaded.", "#fff");
-        }
-    </script>
+    function guardar() {
+        const inputs = document.querySelectorAll('input[data-off]');
+        inputs.forEach(i => {
+            vista.setFloat64(parseInt(i.dataset.off), parseFloat(i.value), true);
+        });
+        const blob = new Blob([buffer], {type: "application/octet-stream"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "nuevo_maestro.MgComp";
+        a.click();
+    }
+</script>
 </body>
 </html>
