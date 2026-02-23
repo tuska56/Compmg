@@ -2,185 +2,134 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>NUNCIO CORE - STRESS TESTED v9.0</title>
+    <title>MgComp Matrix Editor Pro</title>
     <style>
-        :root { --neon: #00ff41; --bg: #030303; --panel: #0a0a0a; --border: #1a1a1a; }
-        body { background: var(--bg); color: #888; font-family: 'Consolas', monospace; margin: 0; padding: 20px; overflow-x: hidden; }
-        
-        /* Dashboard Industrial */
-        .terminal { background: #000; border: 1px solid var(--border); padding: 10px; font-size: 11px; height: 140px; overflow-y: auto; color: #00ff41; border-left: 4px solid var(--neon); margin-bottom: 20px; }
-        .upload-zone { border: 2px dashed #222; padding: 40px; text-align: center; cursor: pointer; border-radius: 4px; transition: 0.2s; }
-        .upload-zone:hover { border-color: var(--neon); background: rgba(0,255,65,0.02); }
-        
-        /* Contenedores de Ejes */
-        .axis-card { background: var(--panel); border: 1px solid var(--border); margin-bottom: 30px; border-radius: 2px; }
-        .axis-header { background: #111; padding: 10px 15px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .axis-title { color: #fff; font-weight: bold; font-size: 14px; }
-        .axis-stats { font-size: 10px; color: #444; }
-
-        /* Optimización de Tablas para 20m */
-        .viewport { overflow-y: auto; max-height: 500px; background: #000; }
-        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        th { background: #080808; color: #555; font-size: 9px; padding: 8px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--border); }
-        td { border: 1px solid #0d0d0d; padding: 2px; }
-        
-        input { background: transparent; border: 1px solid transparent; color: #fff; width: 100%; padding: 4px 0; text-align: center; font-size: 11px; transition: 0.1s; }
-        input:hover { background: #111; border-color: #333; }
-        input:focus { background: #000; border-color: var(--neon); color: var(--neon); outline: none; }
-
-        .btn-export { position: fixed; bottom: 30px; right: 30px; background: var(--neon); color: #000; border: none; padding: 16px 40px; font-weight: bold; border-radius: 2px; cursor: pointer; box-shadow: 0 0 30px rgba(0,255,65,0.2); display: none; z-index: 1000; }
-        .btn-export:hover { background: #fff; transform: translateY(-2px); }
-        
-        .chunk-loading { padding: 10px; text-align: center; color: var(--neon); font-size: 10px; }
+        body { font-family: sans-serif; background: #1a1a1a; color: #e0e0e0; margin: 20px; }
+        .container { max-width: 1000px; margin: auto; background: #2d2d2d; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h1 { color: #4a9eff; border-bottom: 2px solid #444; padding-bottom: 10px; }
+        .toolbar { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; background: #383838; padding: 15px; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #1e1e1e; }
+        th { background: #4a9eff; color: white; padding: 10px; position: sticky; top: 0; }
+        td { border: 1px solid #444; padding: 2px; }
+        input { width: 100%; background: transparent; border: none; color: #00ff41; padding: 8px; box-sizing: border-box; font-family: 'Courier New', monospace; text-align: right; }
+        input:focus { background: #333; outline: 1px solid #4a9eff; }
+        input:hover { background: #252525; }
+        .row-idx { background: #333; color: #888; text-align: center; width: 40px; font-size: 0.8em; }
+        .btn { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; transition: 0.3s; }
+        .btn-load { background: #4a9eff; color: white; }
+        .btn-save { background: #28a745; color: white; }
+        .status { margin-top: 10px; font-size: 0.9em; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <div style="max-width: 1600px; margin: auto;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:10px;">
-            <h1 style="margin:0; color:#fff; font-size: 20px;">NUNCIO <span style="color:var(--neon)">CORE</span> V9.0 <span style="font-size:10px; color:#333;">| 500_STRESS_OK</span></h1>
-        </div>
-
-        <div id="terminal" class="terminal">READY::Awaiting file (.MgComp)</div>
-
-        <div id="dropZone" class="upload-zone" onclick="document.getElementById('fIn').click()">
-            <span style="color:#555">DRAG & DROP BINARY OR</span> <span style="color:var(--neon)">CLICK TO BROWSE</span>
-            <input type="file" id="fIn" style="display:none" onchange="loadEngine(this.files[0])">
-        </div>
-
-        <div id="mainEditor" style="margin-top:20px;"></div>
+<div class="container">
+    <h1>MgComp Binary Editor <small style="font-size: 0.5em; color: #888;">v4.0 Matrix Mode</small></h1>
+    
+    <div class="toolbar">
+        <input type="file" id="fileInput" style="display:none" accept=".MgComp">
+        <button class="btn btn-load" onclick="document.getElementById('fileInput').click()">Cargar Archivo</button>
+        <button class="btn btn-save" onclick="saveFile()">Guardar y Exportar</button>
+        <div id="fileInfo" class="status">Esperando archivo...</div>
     </div>
 
-    <button id="exportBtn" class="btn-export" onclick="saveEngine()">CONFIRM CHANGES & EXPORT</button>
+    <div style="overflow-x:auto; max-height: 600px;">
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th class="row-idx">#</th>
+                    <th>Col 1 (TX)</th>
+                    <th>Col 2 (TY)</th>
+                    <th>Col 3 (TZ)</th>
+                    <th>Col 4 (RX)</th>
+                    <th>Col 5 (RY)</th>
+                    <th>Col 6 (RZ)</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                </tbody>
+        </table>
+    </div>
+</div>
 
 <script>
-    let BUFFER = null;
-    let VIEW = null;
+    let originalBuffer;
+    let fileName = "edited_file.MgComp";
+    const BYTES_PER_VALUE = 8; // Float64
+    const COLS = 6;
+    const ROW_SIZE = BYTES_PER_VALUE * COLS; // 48 bytes por fila
 
-    function log(msg) {
-        const t = document.getElementById('terminal');
-        t.innerHTML += `> ${msg}<br>`;
-        t.scrollTop = t.scrollHeight;
-    }
-
-    // --- MOTOR DE BÚSQUEDA BINARIA DE ALTA VELOCIDAD ---
-    function scanBinary(u8) {
-        const marker = [91, 115, 111, 117, 114, 99, 101, 58]; // ";
-        for (let i = 0; i < u8.length - 20; i++) {
-            // Verificación rápida de primer y último byte del marcador
-            if (u8[i] === 91 && u8[i+7] === 58) {
-                let match = true;
-                for (let j = 0; j < 8; j++) {
-                    if (u8[i + j] !== marker[j]) { match = false; break; }
-                }
-                if (match) {
-                    let id = "";
-                    let k = i + 8;
-                    while (u8[k] !== 93 && k < i + 15) id += String.fromCharCode(u8[k++]);
-                    blocks.push({ id: parseInt(id), start: i, dataStart: k + 1 });
-                }
-            }
-        }
-        return blocks;
-    }
-
-    async function loadEngine(file) {
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
         if (!file) return;
-        log(`LOADING_FILE: ${file.name}`);
-        const editor = document.getElementById('mainEditor');
-        editor.innerHTML = "";
+        fileName = file.name;
         
-        const raw = await file.arrayBuffer();
-        BUFFER = new Uint8Array(raw);
-        VIEW = new DataView(raw);
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            originalBuffer = event.target.result;
+            renderMatrix();
+            document.getElementById('fileInfo').innerText = `Archivo: ${fileName} | Tamaño: ${originalBuffer.byteLength} bytes`;
+        };
+        reader.readAsArrayBuffer(file);
+    });
 
-        const blocks = scanBinary(BUFFER);
-        log(`SCAN_SUCCESS: Found ${blocks.length} data blocks.`);
+    function renderMatrix() {
+        const view = new DataView(originalBuffer);
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
 
-        renderAll(blocks);
-        document.getElementById('exportBtn').style.display = "block";
-    }
+        const totalRows = Math.floor(originalBuffer.byteLength / ROW_SIZE);
 
-    function renderAll(blocks) {
-        const editor = document.getElementById('mainEditor');
-        
-        blocks.forEach((b, idx) => {
-            const nextStart = blocks[idx+1] ? blocks[idx+1].start : BUFFER.length;
-            const isAxis = b.id < 13;
-            const points = isAxis ? Math.floor((nextStart - b.dataStart) / 48) : 0;
-
-            const card = document.createElement('div');
-            card.className = 'axis-card';
-            card.innerHTML = `
-                <div class="axis-header">
-                    <div class="axis-title">SOURCE_${b.id}</div>
-                    <div class="axis-stats">${isAxis ? points + ' COMP_POINTS' : 'SYSTEM_PARAMETERS'} | OFFSET: ${b.start}</div>
-                </div>
-                <div class="viewport">
-                    <table>
-                        <thead>
-                            <tr><th width="40">#</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr>
-                        </thead>
-                        <tbody id="rows-${b.id}"></tbody>
-                    </table>
-                </div>`;
-            editor.appendChild(card);
-
-            const tbody = document.getElementById(`rows-${b.id}`);
+        for (let r = 0; r < totalRows; r++) {
+            const tr = document.createElement('tr');
             
-            if (isAxis) {
-                // ESTRATEGIA DE CARGA POR CHUNKS (Para máquinas de 20m)
-                let p = 0;
-                function fill() {
-                    let limit = Math.min(p + 150, points);
-                    let h = "";
-                    for (; p < limit; p++) {
-                        const off = b.dataStart + (p * 48);
-                        h += `<tr><td style="color:#222; font-size:9px;">${p}</td>`;
-                        for (let c = 0; c < 6; c++) {
-                            const v = VIEW.getFloat64(off + (c * 8), true);
-                            h += `<td><input type="number" step="any" data-off="${off + (c * 8)}" value="${v}"></td>`;
-                        }
-                        h += `</tr>`;
-                    }
-                    tbody.insertAdjacentHTML('beforeend', h);
-                    if (p < points) requestAnimationFrame(fill);
-                }
-                fill();
-            } else {
-                // Bloques de parámetros (Geometría)
-                let h = "<tr><td colspan='7' style='padding:15px;'>";
-                for (let off = b.dataStart; off + 8 <= nextStart; off += 8) {
-                    const v = VIEW.getFloat64(off, true);
-                    h += `<div style="display:inline-block; margin-right:15px; color:#555">P: <input type="number" step="any" data-off="${off}" value="${v}" style="width:140px; border-bottom:1px solid #222;"></div>`;
-                }
-                h += "</td></tr>";
-                tbody.innerHTML = h;
+            // Índice de fila
+            const tdIdx = document.createElement('td');
+            tdIdx.className = 'row-idx';
+            tdIdx.innerText = r;
+            tr.appendChild(tdIdx);
+
+            for (let c = 0; c < COLS; c++) {
+                const offset = (r * ROW_SIZE) + (c * BYTES_PER_VALUE);
+                const val = view.getFloat64(offset, true); // Little Endian
+                
+                const td = document.createElement('td');
+                const input = document.createElement('input');
+                input.type = 'text';
+                // Formateo legible: si es muy pequeño, mostrar 0, si es normal, 8 decimales
+                input.value = (Math.abs(val) < 1e-15) ? "0.00000000" : val.toFixed(8);
+                
+                input.dataset.offset = offset;
+                input.onchange = function() {
+                    updateBuffer(this.dataset.offset, this.value);
+                };
+
+                td.appendChild(input);
+                tr.appendChild(td);
             }
-        });
+            tbody.appendChild(tr);
+        }
     }
 
-    function saveEngine() {
-        log("PREPARING_EXPORT: Re-mapping binary data...");
-        const inputs = document.querySelectorAll('input[data-off]');
-        
-        try {
-            inputs.forEach(inp => {
-                const off = parseInt(inp.dataset.off);
-                const val = parseFloat(inp.value);
-                if(!isNaN(val)) VIEW.setFloat64(off, val, true);
-            });
-
-            const blob = new Blob([VIEW.buffer], { type: 'application/octet-stream' });
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = `MASTER_STABLE_V9.MgComp`;
-            a.click();
-            log("EXPORT_COMPLETE: Data integrity verified.", "var(--neon)");
-        } catch (e) {
-            log(`EXPORT_ERROR: ${e.message}`);
+    function updateBuffer(offset, value) {
+        const view = new DataView(originalBuffer);
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+            view.setFloat64(parseInt(offset), numValue, true);
+            console.log(`Guardado: ${numValue} en offset ${offset}`);
         }
+    }
+
+    function saveFile() {
+        if (!originalBuffer) return alert("Primero carga un archivo.");
+        
+        const blob = new Blob([originalBuffer], { type: "application/octet-stream" });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = "MOD_" + fileName;
+        link.click();
     }
 </script>
+
 </body>
 </html>
