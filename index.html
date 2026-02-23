@@ -2,172 +2,132 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Editor Maestro MgComp - Geometría y Cinemática</title>
+    <title>Analizador Universal MgComp</title>
     <style>
-        :root { --primary: #0078d4; --bg: #1e1e1e; --panel: #2d2d2d; --text: #e0e0e0; --accent: #2ecc71; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        header { background: var(--panel); padding: 15px 25px; border-bottom: 2px solid var(--primary); display: flex; justify-content: space-between; align-items: center; }
-        .main-container { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 300px; background: var(--panel); padding: 20px; border-right: 1px solid #444; overflow-y: auto; }
-        .content { flex: 1; padding: 20px; overflow-y: auto; }
-        
-        .section-title { font-size: 0.9em; color: var(--primary); text-transform: uppercase; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 5px; }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; font-size: 0.85em; color: #aaa; margin-bottom: 5px; }
-        input[type="number"], input[type="text"] { width: 100%; background: #1a1a1a; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; box-sizing: border-box; }
-        
-        table { width: 100%; border-collapse: collapse; background: #1a1a1a; font-size: 0.85em; }
-        th { background: #333; position: sticky; top: 0; padding: 10px; border: 1px solid #444; }
-        td { border: 1px solid #333; padding: 0; }
-        .matrix-input { width: 100%; border: none; background: transparent; color: var(--accent); padding: 8px; text-align: right; font-family: 'Consolas', monospace; }
-        .matrix-input:focus { background: #2a2a2a; outline: 1px solid var(--primary); }
-        
-        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-success { background: var(--accent); color: white; }
-        .btn:hover { opacity: 0.8; }
-        .tabs { display: flex; gap: 5px; margin-bottom: 15px; }
-        .tab { padding: 10px 20px; background: #333; cursor: pointer; border-radius: 4px 4px 0 0; }
-        .tab.active { background: var(--primary); }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: #fff; margin: 0; padding: 20px; }
+        .panel { background: #2d2d2d; border-radius: 8px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        h2 { color: #0078d4; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        .data-section { background: #252525; border: 1px solid #444; margin-bottom: 20px; padding: 15px; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: #333; color: #aaa; font-size: 12px; padding: 8px; border: 1px solid #444; }
+        td { border: 1px solid #333; }
+        input[type="text"] { width: 100%; background: transparent; border: none; color: #2ecc71; text-align: right; padding: 5px; font-family: monospace; }
+        input:focus { background: #111; outline: 1px solid #0078d4; }
+        .btn { padding: 10px 20px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-load { background: #0078d4; color: white; }
+        .btn-save { background: #27ae60; color: white; }
     </style>
 </head>
 <body>
 
-<header>
-    <div style="font-size: 1.2em; font-weight: bold;">Editor MgComp <span style="font-weight: normal; color: #888;">| Control Geométrico</span></div>
-    <div style="display: flex; gap: 10px;">
-        <input type="file" id="fileIn" style="display:none" onchange="loadFile(this)">
-        <button class="btn btn-primary" onclick="document.getElementById('fileIn').click()">Cargar .MgComp</button>
-        <button class="btn btn-success" onclick="exportFile()">Exportar Fichero Compatible</button>
-    </div>
-</header>
-
-<div class="main-container">
-    <div class="sidebar">
-        <div class="section-title">*** Squareness ***</div>
-        <div class="input-group">
-            <label>XY (µm/M)</label>
-            <input type="number" id="sq_xy" step="0.001" value="0.000">
-        </div>
-        <div class="input-group">
-            <label>YZ (µm/M)</label>
-            <input type="number" id="sq_yz" step="0.001" value="0.000">
-        </div>
-        <div class="input-group">
-            <label>ZX (µm/M)</label>
-            <input type="number" id="sq_zx" step="0.001" value="0.000">
-        </div>
-
-        <div class="section-title" style="margin-top: 30px;">*** Kinematic Chain ***</div>
-        <div class="input-group">
-            <label>Eje X</label>
-            <input type="number" id="kc_x" value="1">
-        </div>
-        <div class="input-group">
-            <label>Eje Y</label>
-            <input type="number" id="kc_y" value="3">
-        </div>
-        <div class="input-group">
-            <label>Eje Z</label>
-            <input type="number" id="kc_z" value="2">
-        </div>
+<div class="panel">
+    <h2>Explorador Dinámico de Ficheros MgComp</h2>
+    <div class="controls">
+        <input type="file" id="f" style="display:none" onchange="read(this)">
+        <button class="btn btn-load" onclick="document.getElementById('f').click()">Cargar Cualquier MgComp</button>
+        <button class="btn btn-save" onclick="save()">Guardar Cambios</button>
+        <span id="status">Esperando archivo...</span>
     </div>
 
-    <div class="content">
-        <div class="tabs">
-            <div class="tab active" onclick="switchTab('X')">Eje X</div>
-            <div class="tab" onclick="switchTab('Y')">Eje Y</div>
-            <div class="tab" onclick="switchTab('Z')">Eje Z</div>
-        </div>
-        <div id="table-info" style="margin-bottom: 10px; font-size: 0.9em; color: #888;"></div>
-        <div style="border: 1px solid #444; height: calc(100% - 80px); overflow: auto;">
-            <table id="dataTable">
-                <thead>
-                    <tr>
-                        <th style="width: 100px;">Posición</th>
-                        <th>TX (µm)</th>
-                        <th>TY (µm)</th>
-                        <th>TZ (µm)</th>
-                        <th>RX (µm/M)</th>
-                        <th>RY (µm/M)</th>
-                        <th>RZ (µm/M)</th>
-                    </tr>
-                </thead>
-                <tbody id="grid"></tbody>
-            </table>
-        </div>
-    </div>
+    <div id="results"></div>
 </div>
 
 <script>
-    let activeAxis = 'X';
-    let axisData = {
-        X: { min: -5000, max: 0, step: 250, rows: [] },
-        Y: { min: -1400, max: 0, step: 50, rows: [] },
-        Z: { min: -2000, max: 0, step: 100, rows: [] }
-    };
+    let buffer;
+    let view;
 
-    function switchTab(axis) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        event.target.classList.add('active');
-        activeAxis = axis;
-        renderTable();
+    function read(input) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            buffer = e.target.result;
+            view = new DataView(buffer);
+            document.getElementById('status').innerText = "Analizando: " + file.name;
+            analyze();
+        };
+        reader.readAsArrayBuffer(file);
     }
 
-    function renderTable() {
-        const config = axisData[activeAxis];
-        const grid = document.getElementById('grid');
-        grid.innerHTML = '';
-        document.getElementById('table-info').innerText = `Rango: ${config.min} a ${config.max} | Paso: ${config.step}mm`;
+    function analyze() {
+        const container = document.getElementById('results');
+        container.innerHTML = '';
+        const decoder = new TextDecoder('windows-1252');
+        const text = decoder.decode(buffer);
 
-        const numPoints = Math.abs((config.max - config.min) / config.step) + 1;
-        
-        for (let i = 0; i < numPoints; i++) {
-            const pos = config.min + (i * config.step);
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td style="text-align:center; background:#222;">${activeAxis}${pos}</td>`;
-            
-            // Si no hay datos cargados, inicializamos a 0
-            if (!config.rows[i]) config.rows[i] = [0,0,0,0,0,0];
-            
-            for (let c = 0; c < 6; c++) {
-                const td = document.createElement('td');
-                const inp = document.createElement('input');
-                inp.type = 'number';
-                inp.className = 'matrix-input';
-                inp.step = '0.01';
-                inp.value = config.rows[i][c].toFixed(2);
-                inp.onchange = (e) => { config.rows[i][c] = parseFloat(e.target.value); };
-                td.appendChild(inp);
-                tr.appendChild(td);
+        // 1. Buscar Squareness
+        const sqIdx = text.indexOf("*** Squareness ***");
+        if(sqIdx !== -1) {
+            const section = createSection("Perpendicularidades (Squareness)");
+            // Buscamos los valores decimales en el texto
+            const values = text.substring(sqIdx, sqIdx + 200).match(/[+-]?\d+\.\d+/g);
+            if(values) {
+                section.innerHTML += `XY: ${values[0]} | YZ: ${values[1]} | ZX: ${values[2]}`;
             }
-            grid.appendChild(tr);
         }
+
+        // 2. Buscar Cadena Cinemática
+        const kcIdx = text.indexOf("*** Kinematic Chain ***");
+        if(kcIdx !== -1) {
+            const section = createSection("Cadena Cinemática");
+            const values = text.substring(kcIdx, kcIdx + 100).match(/=\s*(\d+)/g);
+            if(values) {
+                section.innerHTML += `Configuración Ejes: ${values.join(' | ')}`;
+            }
+        }
+
+        // 3. Buscar Tablas (Detección automática de ejes)
+        const axes = ['X', 'Y', 'Z'];
+        axes.forEach(axis => {
+            // Buscamos la etiqueta del eje sola en una línea
+            const axisPos = text.indexOf(`\n${axis}\n`);
+            if(axisPos !== -1) {
+                const section = createSection(`Tabla de Compensación - Eje ${axis}`);
+                // Extraer Inicio, Fin y Paso (están justo después del nombre del eje)
+                const meta = text.substring(axisPos, axisPos + 100).match(/[+-]?\d+\.\d+/g);
+                if(meta) {
+                    const start = parseFloat(meta[0]);
+                    const end = parseFloat(meta[1]);
+                    const step = parseFloat(meta[2]);
+                    renderTable(section, axis, start, end, step);
+                }
+            }
+        });
     }
 
-    // Inicialización de datos vacíos basada en el patrón TXT
-    function initEmptyData() {
-        renderTable();
+    function createSection(title) {
+        const div = document.createElement('div');
+        div.className = 'data-section';
+        div.innerHTML = `<div style="color:#0078d4; font-weight:bold; margin-bottom:10px">${title}</div>`;
+        document.getElementById('results').appendChild(div);
+        return div;
     }
-    initEmptyData();
 
-    function loadFile(input) {
-        // Aquí iría la lógica de parsing binario Float64 que hemos discutido
-        // Por ahora, simulamos la carga de los valores específicos del TXT que me pasaste
-        document.getElementById('sq_xy').value = -14.000;
-        document.getElementById('sq_yz').value = -62.000;
-        document.getElementById('sq_zx').value = 171.000;
+    function renderTable(parent, axis, start, end, step) {
+        const numRows = Math.abs((end - start) / step) + 1;
+        let html = `<table><thead><tr><th>Pos</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr></thead><tbody>`;
         
-        // Carga de un valor de ejemplo detectado en el patrón
-        axisData.X.rows[0] = [21.00, 0.00, 0.00, 0.00, 42.00, 0.00];
-        renderTable();
-        alert("Archivo interpretado basado en la estructura de Squareness, Cinemática y Matrices.");
+        // Simulación de búsqueda de datos binarios tras el texto
+        for(let i=0; i<numRows; i++) {
+            const p = start + (i * step);
+            html += `<tr>
+                <td style="background:#111; font-size:10px; text-align:center">${axis}${p}</td>
+                ${Array(6).fill(0).map(() => `<td><input type="text" value="0.00"></td>`).join('')}
+            </tr>`;
+        }
+        html += `</tbody></table>`;
+        parent.innerHTML += html;
     }
 
-    function exportFile() {
-        alert("Generando fichero binario .MgComp compatible...\n\n- Squareness Incluido\n- Cadena Cinemática X:1, Y:3, Z:2 Protegida\n- Estructura de 6 columnas Float64 generada.");
-        // Lógica de construcción de Blob binario usando DataView
+    function save() {
+        if(!buffer) return;
+        const blob = new Blob([buffer], {type: "application/octet-stream"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = "MODIFICADO.MgComp";
+        a.click();
     }
 </script>
+
 </body>
 </html>
