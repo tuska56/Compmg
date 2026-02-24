@@ -1,161 +1,125 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Editor Universal MgComp (Texto/Binario)</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1b; color: #d1d1d1; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        header { background: #252526; padding: 15px 25px; border-bottom: 2px solid #007acc; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; text-transform: uppercase; }
-        .badge-bin { background: #e67e22; color: white; }
-        .badge-txt { background: #27ae60; color: white; }
-        .content { flex: 1; padding: 20px; overflow-y: auto; }
-        .card { background: #2d2d2d; border-radius: 6px; padding: 15px; margin-bottom: 20px; border: 1px solid #3e3e42; }
-        .section-title { color: #569cd6; font-size: 1.1em; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid #3e3e42; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; font-family: 'Consolas', monospace; font-size: 0.9em; }
-        th { background: #333337; color: #9cdcfe; padding: 8px; border: 1px solid #454545; text-align: left; }
-        td { border: 1px solid #3e3e42; padding: 0; }
-        input { width: 100%; background: transparent; border: none; color: #b5cea8; padding: 8px; text-align: right; box-sizing: border-box; }
-        input:focus { background: #1e1e1e; outline: 1px solid #007acc; color: #fff; }
-        .btn { padding: 10px 20px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-primary { background: #007acc; color: white; }
-        .btn-primary:hover { background: #0062a3; }
-        .btn-success { background: #28a745; color: white; }
-    </style>
+<meta charset="UTF-8">
+<title>Corrección por Mínimos Cuadrados</title>
+<style>
+body { font-family: Arial; margin: 30px; }
+textarea { width: 100%; height: 150px; }
+button { margin: 5px 0; padding: 8px 12px; }
+.resultado { margin-top: 15px; font-weight: bold; }
+</style>
 </head>
 <body>
 
-<header>
-    <div>
-        <strong>Analizador MgComp</strong> 
-        <span id="fileTypeLabel"></span>
-    </div>
-    <div style="display: flex; gap: 10px;">
-        <input type="file" id="fileInput" style="display:none" onchange="processFile(this)">
-        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Abrir Fichero</button>
-        <button class="btn btn-success" onclick="saveFile()">Guardar Cambios</button>
-    </div>
-</header>
+<h2>Corrección de Error por Mínimos Cuadrados</h2>
 
-<div class="content" id="mainContainer">
-    <div style="text-align: center; margin-top: 100px; color: #858585;">
-        <h3>Cargue un archivo .MgComp para comenzar</h3>
-        <p>Soporta formatos 1.MgComp (Texto) y 2.MgComp (Binario)</p>
-    </div>
-</div>
+<p>Pega los datos en formato:</p>
+<p><b>posición,error</b></p>
+<p>Ejemplo:</p>
+<pre>
+0,2
+100,8
+200,15
+300,21
+</pre>
+
+<textarea id="datos"></textarea>
+
+<br>
+<label>
+<input type="checkbox" id="quitarOffset" checked>
+Quitar pendiente y offset
+</label>
+
+<br>
+<button onclick="calcular()">Calcular</button>
+<button onclick="descargarCSV()">Descargar fichero corregido</button>
+
+<div class="resultado" id="resultado"></div>
 
 <script>
-    let currentBuffer;
-    let isBinaryMode = false;
-    let machineData = { squareness: {}, kinematic: {}, axes: {} };
 
-    async function processFile(input) {
-        const file = input.files[0];
-        if (!file) return;
+let datosProcesados = [];
+let erroresCorregidos = [];
 
-        const buffer = await file.arrayBuffer();
-        currentBuffer = buffer;
-        
-        // DETECCIÓN AUTOMÁTICA
-        const view = new DataView(buffer);
-        // Si no detecta etiquetas de texto comunes al inicio, asume binario
-        const firstBytes = new TextDecoder().decode(buffer.slice(0, 100));
-        isBinaryMode = !firstBytes.includes("***");
+function calcular() {
 
-        updateUI(file.name);
-        
-        if (isBinaryMode) {
-            parseBinary(buffer);
+    const texto = document.getElementById("datos").value.trim();
+    const lineas = texto.split("\n");
+
+    let x = [];
+    let e = [];
+
+    lineas.forEach(linea => {
+        const partes = linea.split(",");
+        if (partes.length === 2) {
+            x.push(parseFloat(partes[0]));
+            e.push(parseFloat(partes[1]));
+        }
+    });
+
+    const n = x.length;
+
+    const mediaX = x.reduce((a,b)=>a+b,0)/n;
+    const mediaE = e.reduce((a,b)=>a+b,0)/n;
+
+    let num = 0;
+    let den = 0;
+
+    for (let i=0;i<n;i++){
+        num += (x[i]-mediaX)*(e[i]-mediaE);
+        den += (x[i]-mediaX)*(x[i]-mediaX);
+    }
+
+    const b = num/den;
+    const a = mediaE - b*mediaX;
+
+    erroresCorregidos = [];
+
+    const quitarOffset = document.getElementById("quitarOffset").checked;
+
+    for (let i=0;i<n;i++){
+        if (quitarOffset){
+            erroresCorregidos.push(e[i] - (a + b*x[i]));
         } else {
-            parseText(firstBytes, buffer);
+            erroresCorregidos.push(e[i] - b*x[i]);
         }
     }
 
-    function updateUI(name) {
-        const label = document.getElementById('fileTypeLabel');
-        label.className = isBinaryMode ? 'badge badge-bin' : 'badge badge-txt';
-        label.innerText = isBinaryMode ? 'Modo Binario Detectado' : 'Modo Texto Detectado';
-        document.getElementById('mainContainer').innerHTML = '';
+    datosProcesados = x;
+
+    document.getElementById("resultado").innerHTML =
+        "Pendiente (b): " + b.toFixed(8) +
+        "<br>Intercepto (a): " + a.toFixed(8) +
+        "<br>Pendiente en ppm (si µm/mm): " + (b*1000).toFixed(3);
+
+}
+
+function descargarCSV(){
+
+    if (datosProcesados.length === 0){
+        alert("Primero calcula.");
+        return;
     }
 
-    // LÓGICA PARA FICHEROS TIPO 1.MgComp (TEXTO)
-    function parseText(sampleText, buffer) {
-        const text = new TextDecoder("windows-1252").decode(buffer);
-        
-        // Extraer Squareness
-        const sq = text.match(/XY\s*=\s*([+-]?\d+\.\d+).*YZ\s*=\s*([+-]?\d+\.\d+).*ZX\s*=\s*([+-]?\d+\.\d+)/s);
-        if (sq) renderSquareness(sq[1], sq[2], sq[3]);
+    let contenido = "posicion,error_corregido\n";
 
-        // Extraer Ejes (X, Y, Z)
-        const axes = ['X', 'Y', 'Z'];
-        axes.forEach(axis => {
-            const regex = new RegExp(`${axis}\\n([+-]?\\d+\\.\\d+)\\n([+-]?\\d+\\.\\d+)\\n([+-]?\\d+\\.\\d+)`, 'g');
-            const match = regex.exec(text);
-            if (match) {
-                renderAxisTable(axis, parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3]), text);
-            }
-        });
+    for (let i=0;i<datosProcesados.length;i++){
+        contenido += datosProcesados[i] + "," + erroresCorregidos[i] + "\n";
     }
 
-    // LÓGICA PARA FICHEROS TIPO 2.MgComp (BINARIO)
-    function parseBinary(buffer) {
-        // En modo binario, los valores son fijos (Double 64 bits)
-        // Valores extraídos de la calibración real MT23X4
-        renderSquareness("-14.000", "-62.000", "171.000");
-        
-        // Simulación de detección de estructura binaria para los 3 ejes
-        renderAxisTable('X', -5000, 0, 250, null);
-        renderAxisTable('Y', -1400, 0, 50, null);
-        renderAxisTable('Z', -2000, 0, 100, null);
-    }
+    const blob = new Blob([contenido], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
 
-    function renderSquareness(xy, yz, zx) {
-        const div = document.createElement('div');
-        div.className = 'card';
-        div.innerHTML = `
-            <div class="section-title">Perpendicularidad (Squareness)</div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-                <div>XY: <input type="text" value="${xy}"></div>
-                <div>YZ: <input type="text" value="${yz}"></div>
-                <div>ZX: <input type="text" value="${zx}"></div>
-            </div>
-        `;
-        document.getElementById('mainContainer').appendChild(div);
-    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tabla_corregida.csv";
+    a.click();
 
-    function renderAxisTable(axis, start, end, step, fullText) {
-        const div = document.createElement('div');
-        div.className = 'card';
-        const points = Math.abs((end - start) / step) + 1;
-        
-        let tableHTML = `<div class="section-title">Eje ${axis} (${start} a ${end} | Paso: ${step})</div>`;
-        tableHTML += `<table><thead><tr><th>Posición</th><th>TX</th><th>TY</th><th>TZ</th><th>RX</th><th>RY</th><th>RZ</th></tr></thead><tbody>`;
+    URL.revokeObjectURL(url);
+}
 
-        for (let i = 0; i < points; i++) {
-            const pos = start + (i * step);
-            // Si es texto, buscamos el valor real en el string, si es binario usamos 0.00 por defecto para editar
-            let rowData = ["0.00", "0.00", "0.00", "0.00", "0.00", "0.00"];
-            
-            if (fullText) {
-                const lineMatch = fullText.match(new RegExp(`${axis}${pos}\\s+([+-]?\\d+\\.\\d+)\\s+([+-]?\\d+\\.\\d+)\\s+([+-]?\\d+\\.\\d+)\\s+([+-]?\\d+\\.\\d+)\\s+([+-]?\\d+\\.\\d+)\\s+([+-]?\\d+\\.\\d+)`));
-                if (lineMatch) rowData = lineMatch.slice(1);
-            }
-
-            tableHTML += `<tr>
-                <td style="padding-left: 10px; background: #252526;">${axis}${pos}</td>
-                ${rowData.map(v => `<td><input type="text" value="${v}"></td>`).join('')}
-            </tr>`;
-        }
-
-        tableHTML += `</tbody></table>`;
-        div.innerHTML = tableHTML;
-        document.getElementById('mainContainer').appendChild(div);
-    }
-
-    function saveFile() {
-        alert("Los cambios han sido procesados. El sistema está listo para re-empaquetar el fichero en formato " + (isBinaryMode ? "BINARIO" : "TEXTO") + ".");
-        // Aquí se implementaría el Blob de descarga reconstruyendo el buffer original
-    }
 </script>
 
 </body>
