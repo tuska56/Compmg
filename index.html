@@ -1,322 +1,256 @@
-import { useState, useEffect } from "react";
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Rebalanceo</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);font-family:Georgia,'Times New Roman',serif;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px 64px}
+.wrap{width:100%;max-width:480px}
+.header{margin-bottom:28px;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:10px;background:#0f172a;color:#f8fafc;padding:8px 20px;border-radius:99px;margin-bottom:12px;font-size:12px;letter-spacing:.08em;font-family:monospace}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+h1{font-size:26px;font-weight:700;color:#0f172a;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
+.sub{color:#64748b;font-size:14px}
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.04);margin-bottom:12px}
+.card-title{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.step-num{background:#0f172a;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-family:monospace;flex-shrink:0}
+.card-title span{font-weight:600;color:#0f172a;font-size:15px}
+.fund{margin-bottom:14px}
+.fund-label{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;font-weight:600;color:#334155}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.target-badge{margin-left:auto;font-size:11px;color:#94a3b8;font-family:monospace;font-weight:400}
+.input-wrap{position:relative}
+.input-wrap input{width:100%;padding:10px 40px 10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:16px;outline:none;background:#fafafa;color:#0f172a;font-family:monospace;transition:all .15s}
+.input-wrap input:focus{box-shadow:0 0 0 3px #2563eb18}
+.sym{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:14px;pointer-events:none}
+.bar-row{margin-top:6px;display:none}
+.bar-labels{display:flex;justify-content:space-between;margin-bottom:4px}
+.bar-labels span{font-size:11px;color:#94a3b8}
+.bar-track{position:relative;height:6px;background:#f1f5f9;border-radius:99px}
+.bar-fill{position:absolute;left:0;top:0;height:100%;border-radius:99px;transition:width .4s cubic-bezier(.4,0,.2,1)}
+.bar-marker{position:absolute;top:-3px;width:2px;height:12px;background:#94a3b8;border-radius:2px}
+.total-row{margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;display:none;justify-content:space-between;align-items:center}
+.total-row .lbl{font-size:13px;color:#64748b}
+.total-row .val{font-size:15px;font-weight:700;font-family:monospace;color:#0f172a}
+.aporte-wrap{position:relative}
+.aporte-wrap input{width:100%;padding:12px 40px 12px 14px;border:1.5px solid #2563eb55;border-radius:10px;font-size:18px;outline:none;background:#eff6ff;color:#1e40af;font-family:monospace;font-weight:700;transition:all .15s}
+.aporte-wrap input:focus{box-shadow:0 0 0 3px #2563eb18}
+.results{background:#0f172a;border-radius:16px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.15);display:none;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.res-title{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.res-check{background:#22c55e;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.res-title span{font-weight:600;color:#f8fafc;font-size:15px}
+.res-item{background:#1e293b;border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.res-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;font-family:monospace}
+.res-info{flex:1;min-width:0}
+.res-name{font-size:12px;color:#94a3b8;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res-amount{display:flex;align-items:baseline;gap:6px}
+.res-eur{font-size:20px;font-weight:700;font-family:monospace}
+.res-pct{font-size:11px;color:#64748b;font-family:monospace}
+.buy-badge{background:#22c55e22;border:1px solid #22c55e44;border-radius:6px;padding:3px 8px;font-size:10px;color:#4ade80;font-weight:700;letter-spacing:.05em;white-space:nowrap}
+.res-footer{border-top:1px solid #334155;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;align-items:center}
+.res-footer .lbl{font-size:11px;color:#64748b;margin-bottom:2px}
+.res-footer .sub-val{font-size:14px;font-family:monospace;color:#cbd5e1}
+.res-footer .main-val{font-size:18px;font-weight:700;font-family:monospace;color:#f8fafc}
+.note{text-align:center;color:#94a3b8;font-size:11px;margin-top:16px;font-style:italic}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
+input[type=number]{-moz-appearance:textfield}
+</style>
+</head>
+<body>
+<div class="wrap">
 
-const FUNDS = [
-  { id: 0, name: "Fidelity MSCI World", short: "MSCI World", target: 0.75, color: "#2563eb", light: "#eff6ff" },
-  { id: 1, name: "iShares Emerging Markets", short: "Emerging Mkts", target: 0.15, color: "#7c3aed", light: "#f5f3ff" },
-  { id: 2, name: "Vanguard Global Small-Cap", short: "Small-Cap", target: 0.10, color: "#0891b2", light: "#ecfeff" },
-];
+  <div class="header">
+    <div class="badge"><div class="badge-dot"></div> CARTERA 3 FONDOS</div>
+    <h1>Calculadora de<br>Rebalanceo</h1>
+    <p class="sub">Introduce tus saldos y calcula qué comprar este mes</p>
+  </div>
 
-function fmt(n) {
-  if (isNaN(n) || n === null) return "—";
-  return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
-}
+  <div class="card">
+    <div class="card-title"><div class="step-num">1</div><span>Saldo actual de cada fondo</span></div>
 
-function pct(n) {
-  if (isNaN(n) || n === null) return "—";
-  return (n * 100).toFixed(1) + "%";
-}
-
-function Bar({ value, target, color }) {
-  const pctVal = Math.min(value * 100, 100);
-  const pctTarget = target * 100;
-  return (
-    <div style={{ position: "relative", height: 6, background: "#f1f5f9", borderRadius: 99, overflow: "visible" }}>
-      <div style={{
-        position: "absolute", left: 0, top: 0, height: "100%",
-        width: `${pctVal}%`, background: color, borderRadius: 99,
-        transition: "width 0.4s cubic-bezier(.4,0,.2,1)"
-      }} />
-      <div style={{
-        position: "absolute", top: -3, width: 2, height: 12,
-        background: "#94a3b8", borderRadius: 2,
-        left: `calc(${pctTarget}% - 1px)`
-      }} title={`Objetivo: ${pctTarget}%`} />
+    <div class="fund">
+      <div class="fund-label">
+        <span class="dot" style="background:#2563eb"></span>
+        Fidelity MSCI World
+        <span class="target-badge">objetivo 75%</span>
+      </div>
+      <div class="input-wrap">
+        <input type="number" id="b0" min="0" step="0.01" placeholder="0.00" oninput="calc()">
+        <span class="sym">€</span>
+      </div>
+      <div class="bar-row" id="bar0">
+        <div class="bar-labels"><span>Peso actual</span><span id="w0"></span></div>
+        <div class="bar-track">
+          <div class="bar-fill" id="bf0" style="background:#2563eb"></div>
+          <div class="bar-marker" id="bm0"></div>
+        </div>
+      </div>
     </div>
-  );
+
+    <div class="fund">
+      <div class="fund-label">
+        <span class="dot" style="background:#7c3aed"></span>
+        iShares Emerging Markets
+        <span class="target-badge">objetivo 15%</span>
+      </div>
+      <div class="input-wrap">
+        <input type="number" id="b1" min="0" step="0.01" placeholder="0.00" oninput="calc()">
+        <span class="sym">€</span>
+      </div>
+      <div class="bar-row" id="bar1">
+        <div class="bar-labels"><span>Peso actual</span><span id="w1"></span></div>
+        <div class="bar-track">
+          <div class="bar-fill" id="bf1" style="background:#7c3aed"></div>
+          <div class="bar-marker" id="bm1"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fund">
+      <div class="fund-label">
+        <span class="dot" style="background:#0891b2"></span>
+        Vanguard Global Small-Cap
+        <span class="target-badge">objetivo 10%</span>
+      </div>
+      <div class="input-wrap">
+        <input type="number" id="b2" min="0" step="0.01" placeholder="0.00" oninput="calc()">
+        <span class="sym">€</span>
+      </div>
+      <div class="bar-row" id="bar2">
+        <div class="bar-labels"><span>Peso actual</span><span id="w2"></span></div>
+        <div class="bar-track">
+          <div class="bar-fill" id="bf2" style="background:#0891b2"></div>
+          <div class="bar-marker" id="bm2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="total-row" id="totalRow">
+      <span class="lbl">Total cartera</span>
+      <span class="val" id="totalVal"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><div class="step-num">2</div><span>Aporte mensual</span></div>
+    <div class="aporte-wrap">
+      <input type="number" id="aporte" min="0" step="0.01" value="2000" oninput="calc()">
+      <span class="sym" style="color:#93c5fd">€</span>
+    </div>
+  </div>
+
+  <div class="results" id="results">
+    <div class="res-title"><div class="res-check">✓</div><span>Compra este mes</span></div>
+    <div id="resItems"></div>
+    <div class="res-footer">
+      <div>
+        <div class="lbl">Nueva cartera total</div>
+        <div class="sub-val" id="newTotal"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="lbl">Total a invertir</div>
+        <div class="main-val" id="totalInvest"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">Sin ventas · Prioriza lo más infraponderado</p>
+</div>
+
+<script>
+const FUNDS = [
+  { t: 0.75, c: '#2563eb', n: 'Fidelity MSCI World' },
+  { t: 0.15, c: '#7c3aed', n: 'iShares Emerging Markets' },
+  { t: 0.10, c: '#0891b2', n: 'Vanguard Global Small-Cap' }
+];
+const LIGHTS = ['#eff6ff', '#f5f3ff', '#ecfeff'];
+
+function eur(n) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
 }
+function pct(n) { return (n * 100).toFixed(1) + '%'; }
 
-export default function App() {
-  const [balances, setBalances] = useState(["", "", ""]);
-  const [contribution, setContribution] = useState("2000");
+function calc() {
+  const bal = FUNDS.map((_, i) => parseFloat(document.getElementById('b' + i).value) || 0);
+  const contrib = parseFloat(document.getElementById('aporte').value) || 0;
+  const tot = bal.reduce((a, b) => a + b, 0);
+  const totNew = tot + contrib;
 
-  const bal = balances.map(v => parseFloat(v.replace(",", ".")) || 0);
-  const contrib = parseFloat(contribution.replace(",", ".")) || 0;
-  const totalCurrent = bal.reduce((a, b) => a + b, 0);
-  const totalNew = totalCurrent + contrib;
+  // Update input styles + bars
+  bal.forEach((b, i) => {
+    const inp = document.getElementById('b' + i);
+    inp.style.border = b ? '1.5px solid ' + FUNDS[i].c + '66' : '1.5px solid #e2e8f0';
+    inp.style.background = b ? LIGHTS[i] : '#fafafa';
+    const barRow = document.getElementById('bar' + i);
+    if (b && tot > 0) {
+      barRow.style.display = 'block';
+      const w = b / tot;
+      document.getElementById('bf' + i).style.width = Math.min(w * 100, 100) + '%';
+      document.getElementById('bm' + i).style.left = 'calc(' + FUNDS[i].t * 100 + '% - 1px)';
+      const wEl = document.getElementById('w' + i);
+      wEl.textContent = pct(w);
+      wEl.style.color = Math.abs(w - FUNDS[i].t) > 0.03 ? '#dc2626' : '#16a34a';
+    } else {
+      barRow.style.display = 'none';
+    }
+  });
 
-  // Algorithm: allocate contribution prioritising most underweight funds
-  const deficits = FUNDS.map((f, i) => Math.max(0, f.target * totalNew - bal[i]));
-  const totalDeficit = deficits.reduce((a, b) => a + b, 0);
-
-  let alloc;
-  if (totalNew === 0 || contrib === 0) {
-    alloc = [0, 0, 0];
-  } else if (totalDeficit >= contrib) {
-    alloc = deficits.map(d => totalDeficit > 0 ? contrib * (d / totalDeficit) : 0);
+  // Total row
+  const totalRow = document.getElementById('totalRow');
+  if (tot > 0) {
+    totalRow.style.display = 'flex';
+    document.getElementById('totalVal').textContent = eur(tot);
   } else {
-    const surplus = contrib - totalDeficit;
-    alloc = deficits.map((d, i) => d + surplus * FUNDS[i].target);
+    totalRow.style.display = 'none';
   }
 
-  const newBalances = bal.map((b, i) => b + alloc[i]);
-  const currentWeights = totalCurrent > 0 ? bal.map(b => b / totalCurrent) : [0, 0, 0];
-  const newWeights = totalNew > 0 ? newBalances.map(b => b / totalNew) : [0, 0, 0];
+  // Hide results if nothing filled
+  if (!bal.some(b => b > 0) || totNew === 0) {
+    document.getElementById('results').style.display = 'none';
+    return;
+  }
 
-  const allFilled = balances.every(v => v !== "") && contribution !== "";
+  // Algorithm: allocate contribution prioritising most underweight
+  const def = FUNDS.map((f, i) => Math.max(0, f.t * totNew - bal[i]));
+  const totDef = def.reduce((a, b) => a + b, 0);
+  let alloc;
+  if (contrib === 0) {
+    alloc = [0, 0, 0];
+  } else if (totDef >= contrib) {
+    alloc = def.map(d => totDef > 0 ? contrib * (d / totDef) : 0);
+  } else {
+    alloc = def.map((d, i) => d + (contrib - totDef) * FUNDS[i].t);
+  }
 
-  return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
-      fontFamily: "'Georgia', 'Times New Roman', serif",
-      display: "flex", alignItems: "flex-start", justifyContent: "center",
-      padding: "32px 16px"
-    }}>
-      <div style={{ width: "100%", maxWidth: 480 }}>
+  const newBal = bal.map((b, i) => b + alloc[i]);
 
-        {/* Header */}
-        <div style={{ marginBottom: 28, textAlign: "center" }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 10,
-            background: "#0f172a", color: "#f8fafc",
-            padding: "8px 20px", borderRadius: 99, marginBottom: 12,
-            fontSize: 12, letterSpacing: "0.08em", fontFamily: "monospace"
-          }}>
-            <span style={{ color: "#60a5fa" }}>●</span> CARTERA 3 FONDOS
-          </div>
-          <h1 style={{
-            margin: 0, fontSize: 26, fontWeight: 700, color: "#0f172a",
-            lineHeight: 1.2, letterSpacing: "-0.02em"
-          }}>
-            Calculadora de<br />Rebalanceo
-          </h1>
-          <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 14 }}>
-            Introduce tus saldos y calcula qué comprar este mes
-          </p>
-        </div>
-
-        {/* Step 1: Saldos */}
-        <div style={{
-          background: "#fff", borderRadius: 16, padding: "20px 20px 16px",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)",
-          marginBottom: 12
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <span style={{
-              background: "#0f172a", color: "#fff", borderRadius: "50%",
-              width: 22, height: 22, display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: 12, fontFamily: "monospace", flexShrink: 0
-            }}>1</span>
-            <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 15 }}>Saldo actual de cada fondo</span>
-          </div>
-
-          {FUNDS.map((fund, i) => (
-            <div key={fund.id} style={{ marginBottom: 14 }}>
-              <label style={{
-                display: "flex", alignItems: "center", gap: 8,
-                marginBottom: 6, fontSize: 13, fontWeight: 600, color: "#334155"
-              }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: fund.color, flexShrink: 0
-                }} />
-                {fund.name}
-                <span style={{
-                  marginLeft: "auto", fontSize: 11, color: "#94a3b8",
-                  fontFamily: "monospace", fontWeight: 400
-                }}>objetivo {pct(fund.target)}</span>
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={balances[i]}
-                  onChange={e => {
-                    const copy = [...balances];
-                    copy[i] = e.target.value;
-                    setBalances(copy);
-                  }}
-                  style={{
-                    width: "100%", boxSizing: "border-box",
-                    padding: "10px 40px 10px 12px",
-                    border: `1.5px solid ${balances[i] ? fund.color + "66" : "#e2e8f0"}`,
-                    borderRadius: 10, fontSize: 16, outline: "none",
-                    background: balances[i] ? fund.light : "#fafafa",
-                    color: "#0f172a", fontFamily: "monospace",
-                    transition: "all 0.15s"
-                  }}
-                />
-                <span style={{
-                  position: "absolute", right: 12, top: "50%",
-                  transform: "translateY(-50%)", color: "#94a3b8", fontSize: 14
-                }}>€</span>
-              </div>
-              {bal[i] > 0 && totalCurrent > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Peso actual</span>
-                    <span style={{
-                      fontSize: 11, fontFamily: "monospace",
-                      color: Math.abs(currentWeights[i] - fund.target) > 0.03 ? "#dc2626" : "#16a34a",
-                      fontWeight: 600
-                    }}>{pct(currentWeights[i])}</span>
-                  </div>
-                  <Bar value={currentWeights[i]} target={fund.target} color={fund.color} />
-                </div>
-              )}
-            </div>
-          ))}
-
-          {totalCurrent > 0 && (
-            <div style={{
-              marginTop: 4, paddingTop: 12, borderTop: "1px solid #f1f5f9",
-              display: "flex", justifyContent: "space-between", alignItems: "center"
-            }}>
-              <span style={{ fontSize: 13, color: "#64748b" }}>Total cartera</span>
-              <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "monospace", color: "#0f172a" }}>
-                {fmt(totalCurrent)}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Step 2: Aporte */}
-        <div style={{
-          background: "#fff", borderRadius: 16, padding: "20px 20px 16px",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)",
-          marginBottom: 12
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <span style={{
-              background: "#0f172a", color: "#fff", borderRadius: "50%",
-              width: 22, height: 22, display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: 12, fontFamily: "monospace", flexShrink: 0
-            }}>2</span>
-            <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 15 }}>Aporte mensual</span>
-          </div>
-          <div style={{ position: "relative" }}>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={contribution}
-              onChange={e => setContribution(e.target.value)}
-              style={{
-                width: "100%", boxSizing: "border-box",
-                padding: "12px 40px 12px 14px",
-                border: "1.5px solid #2563eb55",
-                borderRadius: 10, fontSize: 18, outline: "none",
-                background: "#eff6ff", color: "#1e40af",
-                fontFamily: "monospace", fontWeight: 700,
-                transition: "all 0.15s"
-              }}
-            />
-            <span style={{
-              position: "absolute", right: 14, top: "50%",
-              transform: "translateY(-50%)", color: "#93c5fd", fontSize: 16
-            }}>€</span>
-          </div>
-        </div>
-
-        {/* Results */}
-        {allFilled && totalNew > 0 && (
-          <div style={{
-            background: "#0f172a", borderRadius: 16, padding: "20px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-            animation: "fadeIn 0.3s ease"
-          }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8, marginBottom: 16
-            }}>
-              <span style={{
-                background: "#22c55e", color: "#fff", borderRadius: "50%",
-                width: 22, height: 22, display: "flex", alignItems: "center",
-                justifyContent: "center", fontSize: 12, fontFamily: "monospace", flexShrink: 0
-              }}>✓</span>
-              <span style={{ fontWeight: 600, color: "#f8fafc", fontSize: 15 }}>
-                Compra este mes
-              </span>
-            </div>
-
-            {FUNDS.map((fund, i) => (
-              <div key={fund.id} style={{
-                background: "#1e293b", borderRadius: 12, padding: "14px 16px",
-                marginBottom: 8, display: "flex", alignItems: "center", gap: 12
-              }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: fund.color + "22", border: `1.5px solid ${fund.color}55`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  flexShrink: 0
-                }}>
-                  <span style={{ fontSize: 10, color: fund.color, fontWeight: 700, fontFamily: "monospace" }}>
-                    {fund.short.slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {fund.name}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span style={{
-                      fontSize: 20, fontWeight: 700, fontFamily: "monospace",
-                      color: alloc[i] > 0.01 ? "#4ade80" : "#475569"
-                    }}>
-                      {fmt(alloc[i])}
-                    </span>
-                    {alloc[i] > 0.01 && (
-                      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace" }}>
-                        → {pct(newWeights[i])}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {alloc[i] > 0.01 && (
-                  <div style={{
-                    background: "#22c55e22", border: "1px solid #22c55e44",
-                    borderRadius: 6, padding: "3px 8px",
-                    fontSize: 10, color: "#4ade80", fontWeight: 700,
-                    letterSpacing: "0.05em"
-                  }}>COMPRAR</div>
-                )}
-              </div>
-            ))}
-
-            <div style={{
-              borderTop: "1px solid #334155", marginTop: 12, paddingTop: 12,
-              display: "flex", justifyContent: "space-between", alignItems: "center"
-            }}>
-              <div>
-                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Nueva cartera total</div>
-                <div style={{ fontSize: 14, fontFamily: "monospace", color: "#cbd5e1" }}>{fmt(totalNew)}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Total a invertir</div>
-                <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "monospace", color: "#f8fafc" }}>
-                  {fmt(alloc.reduce((a, b) => a + b, 0))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <p style={{
-          textAlign: "center", color: "#94a3b8", fontSize: 11,
-          marginTop: 16, fontStyle: "italic"
-        }}>
-          Sin ventas · Prioriza lo más infraponderado
-        </p>
+  // Render result items
+  document.getElementById('resItems').innerHTML = FUNDS.map((f, i) => `
+    <div class="res-item">
+      <div class="res-icon" style="background:${f.c}22;border:1.5px solid ${f.c}55;color:${f.c}">
+        ${f.n.slice(0, 2).toUpperCase()}
       </div>
-
-      <style>{`
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-        input[type=number] { -moz-appearance: textfield; }
-        input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px #2563eb18; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
+      <div class="res-info">
+        <div class="res-name">${f.n}</div>
+        <div class="res-amount">
+          <span class="res-eur" style="color:${alloc[i] > 0.01 ? '#4ade80' : '#475569'}">${eur(alloc[i])}</span>
+          ${alloc[i] > 0.01 ? `<span class="res-pct">→ ${pct(newBal[i] / totNew)}</span>` : ''}
+        </div>
+      </div>
+      ${alloc[i] > 0.01 ? '<div class="buy-badge">COMPRAR</div>' : ''}
     </div>
-  );
+  `).join('');
+
+  document.getElementById('newTotal').textContent = eur(totNew);
+  document.getElementById('totalInvest').textContent = eur(alloc.reduce((a, b) => a + b, 0));
+  document.getElementById('results').style.display = 'block';
 }
+
+calc();
+</script>
+</body>
+</html>
