@@ -1,126 +1,322 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Corrección por Mínimos Cuadrados</title>
-<style>
-body { font-family: Arial; margin: 30px; }
-textarea { width: 100%; height: 150px; }
-button { margin: 5px 0; padding: 8px 12px; }
-.resultado { margin-top: 15px; font-weight: bold; }
-</style>
-</head>
-<body>
+import { useState, useEffect } from "react";
 
-<h2>Corrección de Error por Mínimos Cuadrados</h2>
+const FUNDS = [
+  { id: 0, name: "Fidelity MSCI World", short: "MSCI World", target: 0.75, color: "#2563eb", light: "#eff6ff" },
+  { id: 1, name: "iShares Emerging Markets", short: "Emerging Mkts", target: 0.15, color: "#7c3aed", light: "#f5f3ff" },
+  { id: 2, name: "Vanguard Global Small-Cap", short: "Small-Cap", target: 0.10, color: "#0891b2", light: "#ecfeff" },
+];
 
-<p>Pega los datos en formato:</p>
-<p><b>posición,error</b></p>
-<p>Ejemplo:</p>
-<pre>
-0,2
-100,8
-200,15
-300,21
-</pre>
-
-<textarea id="datos"></textarea>
-
-<br>
-<label>
-<input type="checkbox" id="quitarOffset" checked>
-Quitar pendiente y offset
-</label>
-
-<br>
-<button onclick="calcular()">Calcular</button>
-<button onclick="descargarCSV()">Descargar fichero corregido</button>
-
-<div class="resultado" id="resultado"></div>
-
-<script>
-
-let datosProcesados = [];
-let erroresCorregidos = [];
-
-function calcular() {
-
-    const texto = document.getElementById("datos").value.trim();
-    const lineas = texto.split("\n");
-
-    let x = [];
-    let e = [];
-
-    lineas.forEach(linea => {
-        const partes = linea.split(",");
-        if (partes.length === 2) {
-            x.push(parseFloat(partes[0]));
-            e.push(parseFloat(partes[1]));
-        }
-    });
-
-    const n = x.length;
-
-    const mediaX = x.reduce((a,b)=>a+b,0)/n;
-    const mediaE = e.reduce((a,b)=>a+b,0)/n;
-
-    let num = 0;
-    let den = 0;
-
-    for (let i=0;i<n;i++){
-        num += (x[i]-mediaX)*(e[i]-mediaE);
-        den += (x[i]-mediaX)*(x[i]-mediaX);
-    }
-
-    const b = num/den;
-    const a = mediaE - b*mediaX;
-
-    erroresCorregidos = [];
-
-    const quitarOffset = document.getElementById("quitarOffset").checked;
-
-    for (let i=0;i<n;i++){
-        if (quitarOffset){
-            erroresCorregidos.push(e[i] - (a + b*x[i]));
-        } else {
-            erroresCorregidos.push(e[i] - b*x[i]);
-        }
-    }
-
-    datosProcesados = x;
-
-    document.getElementById("resultado").innerHTML =
-        "Pendiente (b): " + b.toFixed(8) +
-        "<br>Intercepto (a): " + a.toFixed(8) +
-        "<br>Pendiente en ppm (si µm/mm): " + (b*1000).toFixed(3);
-
+function fmt(n) {
+  if (isNaN(n) || n === null) return "—";
+  return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
 }
 
-function descargarCSV(){
-
-    if (datosProcesados.length === 0){
-        alert("Primero calcula.");
-        return;
-    }
-
-    let contenido = "posicion,error_corregido\n";
-
-    for (let i=0;i<datosProcesados.length;i++){
-        contenido += datosProcesados[i] + "," + erroresCorregidos[i] + "\n";
-    }
-
-    const blob = new Blob([contenido], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "tabla_corregida.csv";
-    a.click();
-
-    URL.revokeObjectURL(url);
+function pct(n) {
+  if (isNaN(n) || n === null) return "—";
+  return (n * 100).toFixed(1) + "%";
 }
 
-</script>
+function Bar({ value, target, color }) {
+  const pctVal = Math.min(value * 100, 100);
+  const pctTarget = target * 100;
+  return (
+    <div style={{ position: "relative", height: 6, background: "#f1f5f9", borderRadius: 99, overflow: "visible" }}>
+      <div style={{
+        position: "absolute", left: 0, top: 0, height: "100%",
+        width: `${pctVal}%`, background: color, borderRadius: 99,
+        transition: "width 0.4s cubic-bezier(.4,0,.2,1)"
+      }} />
+      <div style={{
+        position: "absolute", top: -3, width: 2, height: 12,
+        background: "#94a3b8", borderRadius: 2,
+        left: `calc(${pctTarget}% - 1px)`
+      }} title={`Objetivo: ${pctTarget}%`} />
+    </div>
+  );
+}
 
-</body>
-</html>
+export default function App() {
+  const [balances, setBalances] = useState(["", "", ""]);
+  const [contribution, setContribution] = useState("2000");
+
+  const bal = balances.map(v => parseFloat(v.replace(",", ".")) || 0);
+  const contrib = parseFloat(contribution.replace(",", ".")) || 0;
+  const totalCurrent = bal.reduce((a, b) => a + b, 0);
+  const totalNew = totalCurrent + contrib;
+
+  // Algorithm: allocate contribution prioritising most underweight funds
+  const deficits = FUNDS.map((f, i) => Math.max(0, f.target * totalNew - bal[i]));
+  const totalDeficit = deficits.reduce((a, b) => a + b, 0);
+
+  let alloc;
+  if (totalNew === 0 || contrib === 0) {
+    alloc = [0, 0, 0];
+  } else if (totalDeficit >= contrib) {
+    alloc = deficits.map(d => totalDeficit > 0 ? contrib * (d / totalDeficit) : 0);
+  } else {
+    const surplus = contrib - totalDeficit;
+    alloc = deficits.map((d, i) => d + surplus * FUNDS[i].target);
+  }
+
+  const newBalances = bal.map((b, i) => b + alloc[i]);
+  const currentWeights = totalCurrent > 0 ? bal.map(b => b / totalCurrent) : [0, 0, 0];
+  const newWeights = totalNew > 0 ? newBalances.map(b => b / totalNew) : [0, 0, 0];
+
+  const allFilled = balances.every(v => v !== "") && contribution !== "";
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
+      fontFamily: "'Georgia', 'Times New Roman', serif",
+      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      padding: "32px 16px"
+    }}>
+      <div style={{ width: "100%", maxWidth: 480 }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: 28, textAlign: "center" }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 10,
+            background: "#0f172a", color: "#f8fafc",
+            padding: "8px 20px", borderRadius: 99, marginBottom: 12,
+            fontSize: 12, letterSpacing: "0.08em", fontFamily: "monospace"
+          }}>
+            <span style={{ color: "#60a5fa" }}>●</span> CARTERA 3 FONDOS
+          </div>
+          <h1 style={{
+            margin: 0, fontSize: 26, fontWeight: 700, color: "#0f172a",
+            lineHeight: 1.2, letterSpacing: "-0.02em"
+          }}>
+            Calculadora de<br />Rebalanceo
+          </h1>
+          <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 14 }}>
+            Introduce tus saldos y calcula qué comprar este mes
+          </p>
+        </div>
+
+        {/* Step 1: Saldos */}
+        <div style={{
+          background: "#fff", borderRadius: 16, padding: "20px 20px 16px",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)",
+          marginBottom: 12
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <span style={{
+              background: "#0f172a", color: "#fff", borderRadius: "50%",
+              width: 22, height: 22, display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 12, fontFamily: "monospace", flexShrink: 0
+            }}>1</span>
+            <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 15 }}>Saldo actual de cada fondo</span>
+          </div>
+
+          {FUNDS.map((fund, i) => (
+            <div key={fund.id} style={{ marginBottom: 14 }}>
+              <label style={{
+                display: "flex", alignItems: "center", gap: 8,
+                marginBottom: 6, fontSize: 13, fontWeight: 600, color: "#334155"
+              }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: fund.color, flexShrink: 0
+                }} />
+                {fund.name}
+                <span style={{
+                  marginLeft: "auto", fontSize: 11, color: "#94a3b8",
+                  fontFamily: "monospace", fontWeight: 400
+                }}>objetivo {pct(fund.target)}</span>
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={balances[i]}
+                  onChange={e => {
+                    const copy = [...balances];
+                    copy[i] = e.target.value;
+                    setBalances(copy);
+                  }}
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    padding: "10px 40px 10px 12px",
+                    border: `1.5px solid ${balances[i] ? fund.color + "66" : "#e2e8f0"}`,
+                    borderRadius: 10, fontSize: 16, outline: "none",
+                    background: balances[i] ? fund.light : "#fafafa",
+                    color: "#0f172a", fontFamily: "monospace",
+                    transition: "all 0.15s"
+                  }}
+                />
+                <span style={{
+                  position: "absolute", right: 12, top: "50%",
+                  transform: "translateY(-50%)", color: "#94a3b8", fontSize: 14
+                }}>€</span>
+              </div>
+              {bal[i] > 0 && totalCurrent > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Peso actual</span>
+                    <span style={{
+                      fontSize: 11, fontFamily: "monospace",
+                      color: Math.abs(currentWeights[i] - fund.target) > 0.03 ? "#dc2626" : "#16a34a",
+                      fontWeight: 600
+                    }}>{pct(currentWeights[i])}</span>
+                  </div>
+                  <Bar value={currentWeights[i]} target={fund.target} color={fund.color} />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {totalCurrent > 0 && (
+            <div style={{
+              marginTop: 4, paddingTop: 12, borderTop: "1px solid #f1f5f9",
+              display: "flex", justifyContent: "space-between", alignItems: "center"
+            }}>
+              <span style={{ fontSize: 13, color: "#64748b" }}>Total cartera</span>
+              <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "monospace", color: "#0f172a" }}>
+                {fmt(totalCurrent)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Step 2: Aporte */}
+        <div style={{
+          background: "#fff", borderRadius: 16, padding: "20px 20px 16px",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)",
+          marginBottom: 12
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <span style={{
+              background: "#0f172a", color: "#fff", borderRadius: "50%",
+              width: 22, height: 22, display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 12, fontFamily: "monospace", flexShrink: 0
+            }}>2</span>
+            <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 15 }}>Aporte mensual</span>
+          </div>
+          <div style={{ position: "relative" }}>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={contribution}
+              onChange={e => setContribution(e.target.value)}
+              style={{
+                width: "100%", boxSizing: "border-box",
+                padding: "12px 40px 12px 14px",
+                border: "1.5px solid #2563eb55",
+                borderRadius: 10, fontSize: 18, outline: "none",
+                background: "#eff6ff", color: "#1e40af",
+                fontFamily: "monospace", fontWeight: 700,
+                transition: "all 0.15s"
+              }}
+            />
+            <span style={{
+              position: "absolute", right: 14, top: "50%",
+              transform: "translateY(-50%)", color: "#93c5fd", fontSize: 16
+            }}>€</span>
+          </div>
+        </div>
+
+        {/* Results */}
+        {allFilled && totalNew > 0 && (
+          <div style={{
+            background: "#0f172a", borderRadius: 16, padding: "20px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+            animation: "fadeIn 0.3s ease"
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, marginBottom: 16
+            }}>
+              <span style={{
+                background: "#22c55e", color: "#fff", borderRadius: "50%",
+                width: 22, height: 22, display: "flex", alignItems: "center",
+                justifyContent: "center", fontSize: 12, fontFamily: "monospace", flexShrink: 0
+              }}>✓</span>
+              <span style={{ fontWeight: 600, color: "#f8fafc", fontSize: 15 }}>
+                Compra este mes
+              </span>
+            </div>
+
+            {FUNDS.map((fund, i) => (
+              <div key={fund.id} style={{
+                background: "#1e293b", borderRadius: 12, padding: "14px 16px",
+                marginBottom: 8, display: "flex", alignItems: "center", gap: 12
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: fund.color + "22", border: `1.5px solid ${fund.color}55`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0
+                }}>
+                  <span style={{ fontSize: 10, color: fund.color, fontWeight: 700, fontFamily: "monospace" }}>
+                    {fund.short.slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {fund.name}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{
+                      fontSize: 20, fontWeight: 700, fontFamily: "monospace",
+                      color: alloc[i] > 0.01 ? "#4ade80" : "#475569"
+                    }}>
+                      {fmt(alloc[i])}
+                    </span>
+                    {alloc[i] > 0.01 && (
+                      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace" }}>
+                        → {pct(newWeights[i])}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {alloc[i] > 0.01 && (
+                  <div style={{
+                    background: "#22c55e22", border: "1px solid #22c55e44",
+                    borderRadius: 6, padding: "3px 8px",
+                    fontSize: 10, color: "#4ade80", fontWeight: 700,
+                    letterSpacing: "0.05em"
+                  }}>COMPRAR</div>
+                )}
+              </div>
+            ))}
+
+            <div style={{
+              borderTop: "1px solid #334155", marginTop: 12, paddingTop: 12,
+              display: "flex", justifyContent: "space-between", alignItems: "center"
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Nueva cartera total</div>
+                <div style={{ fontSize: 14, fontFamily: "monospace", color: "#cbd5e1" }}>{fmt(totalNew)}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Total a invertir</div>
+                <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "monospace", color: "#f8fafc" }}>
+                  {fmt(alloc.reduce((a, b) => a + b, 0))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <p style={{
+          textAlign: "center", color: "#94a3b8", fontSize: 11,
+          marginTop: 16, fontStyle: "italic"
+        }}>
+          Sin ventas · Prioriza lo más infraponderado
+        </p>
+      </div>
+
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+        input[type=number] { -moz-appearance: textfield; }
+        input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px #2563eb18; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+    </div>
+  );
+}
