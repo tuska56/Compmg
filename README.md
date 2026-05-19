@@ -1,2 +1,2 @@
-# Compmg
-conversor
+# Calculafora rebalanceo 
+Calculadora rebalanceo 
